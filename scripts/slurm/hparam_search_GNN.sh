@@ -1,7 +1,7 @@
 #/bin/zsh
 
 DATA=../data/heteroa/processed/FOLD_0/
-OUT=../output/hparam_search/gnn/
+OUT=../output/hparam_search/FOLD_0/gnn/
 N=3 # number of jobs for h param search to submit; "budget"
 
 # parameter search grid

@@ -236,8 +236,7 @@ def train_gnn(config, kwargs=None):
             best_model = model
 
         if epoch % kwargs.log_every == 0: 
-            out_dict = {'model': model, 
-                        'best_model': best_model,
+            out_dict = {'best_model': best_model,
                         'args': kwargs,
                         'metrics': metrics,
                         'epoch': epoch, 
@@ -247,7 +246,7 @@ def train_gnn(config, kwargs=None):
                         'val_top@100': topat100, 
                         'val_auroc': auroc}
             
-            torch.save(out_dict, f'{kwargs.out}/results_{epoch}.pt')
+            torch.save(out_dict, f'{kwargs.out}/results.pt')
 
         if stopper.step(-topat10): 
             print('early stopping at epoch: ', epoch)
