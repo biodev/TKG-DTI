@@ -176,7 +176,7 @@ def train_gnn(config, kwargs=None):
     prot_idx = tdata.metadata()[0].index('protein')
     crit = torch.nn.BCELoss()
 
-    stopper = EarlyStopper(patience=kwargs.patience)
+    stopper = EarlyStopper(patience=kwargs.patience, min_delta=0.)
 
     best_model = None
     best_topat10 = 0 
@@ -238,7 +238,7 @@ def train_gnn(config, kwargs=None):
             
             torch.save(out_dict, f'{kwargs.out}/results_{epoch}.pt')
 
-        if stopper.step(topat10): 
+        if stopper.step(-topat10): 
             print('early stopping at epoch: ', epoch)
             break
 
