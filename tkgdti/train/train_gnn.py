@@ -11,6 +11,13 @@ from tkgdti.train.utils import device_and_data_loading
 from tkgdti.models.GNN import GNN
 from tkgdti.train.EarlyStopper import EarlyStopper
 import pandas as pd 
+import uuid 
+import os 
+
+# BUG: "RuntimeError: received 0 items of ancdata" (fix: https://stackoverflow.com/questions/71642653/how-to-resolve-the-error-runtimeerror-received-0-items-of-ancdata)
+import resource
+rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+resource.setrlimit(resource.RLIMIT_NOFILE, (2048, rlimit[1]))
 
 
 def predict_all(data, tdata, train_triples, valid_triples, test_triples, model, device): 
@@ -120,6 +127,10 @@ def eval(loader, model, prot_idx, device='cpu', deterministic=True):
 def train_gnn(config, kwargs=None): 
     '''
     '''
+    uid = uuid.uuid4()
+    print(f'uid: {uid}')
+    os.makedirs(kwargs.out + '/' + str(uid), exist_ok=True)
+    kwargs.out = kwargs.out + '/' + str(uid)
 
     device, data, train_triples, valid_triples, valid_neg_triples, test_triples, test_neg_triples  = device_and_data_loading(kwargs, return_test=True)
 
@@ -204,7 +215,6 @@ def train_gnn(config, kwargs=None):
             pout = out[prot_mask]
             py = y[prot_mask]
 
-            #loss = pout[py == 0].mean() - pout[py == 1].mean() # make true dtis big, and false dtis small
             loss = crit(pout.view(-1), py.view(-1))
             loss.backward()
             optim.step()
@@ -228,6 +238,7 @@ def train_gnn(config, kwargs=None):
         if epoch % kwargs.log_every == 0: 
             out_dict = {'model': model, 
                         'best_model': best_model,
+                        'args': kwargs,
                         'metrics': metrics,
                         'epoch': epoch, 
                         'train_loss': np.mean(losses), 
