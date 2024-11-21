@@ -1,0 +1,27 @@
+name: tkgdti
+
+channels: 
+    - pytorch 
+    - nvidia 
+    - pyg
+    - defaults 
+    - conda-forge
+
+dependencies:
+    - python=3.11
+    - matplotlib
+    - pyg
+    - pytorch
+    - torchvision
+    - seaborn
+    - scikit-learn
+    - pytorch-cuda
+    - h5py
+    - tensorboard
+    - statsmodels
+    - pip
+    - pip:
+        - ipykernel
+        - umap-learn
+        - biopython
+        - omnipath 
