@@ -1,19 +1,19 @@
-#!/bin/zsh
+#/bin/zsh
 
 DATA=../data/heteroa/processed/FOLD_0/
-OUT=../output/gnn/hparam_search/test/
-N=1 # number of jobs for h param search to submit; "budget"
+OUT=../output/hparam_search/gnn/
+N=3 # number of jobs for h param search to submit; "budget"
 
 # parameter search grid
 lr_list=("0.001" "0.0001")
 do_list=("0")
 c_list=("32" "64")
-lay_list=("4" "6" "8")
-conv_list=("gat")
-
+lay_list=("5" "6" "7")
+conv_list=("gat" "transformer")
+edge_dim_list=("4" "8" "12")
 mkdir $OUT
 
-OUT2=$OUT/slurm_logs__GNN/
+OUT2=../$OUT/slurm_logs__GNN/
 if [ -d "$OUT2" ]; then
         echo "slurm output log dir exists. Erasing contents..."
         rm -r "$OUT2"/*
@@ -30,10 +30,10 @@ for ((i=1; i<=N; i++)); do
         c=$(echo "${c_list[@]}" | tr ' ' '\n' | shuf -n 1)
         lay=$(echo "${lay_list[@]}" | tr ' ' '\n' | shuf -n 1)
         conv=$(echo "${conv_list[@]}" | tr ' ' '\n' | shuf -n 1)
-
+	edim=$(echo "${edge_dim_list[@]}" | tr ' ' '\n' | shuf -n 1)
         jobid=$((jobid+1))
 
-        echo "submitting job: GSNN (lr=$lr, do=$d, c=$c, lay=$lay, conv=$conv, jobid=$jobid)"
+        echo "submitting job: KGDTI - GNN (lr=$lr, do=$d, c=$c, lay=$lay, conv=$conv, edge dim=$edim, jobid=$jobid)"
 
 # SUBMIT SBATCH JOB 
 
@@ -43,7 +43,7 @@ sbatch <<EOF
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
-#SBATCH --time=04:00:00
+#SBATCH --time=12:00:00
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
@@ -53,7 +53,7 @@ sbatch <<EOF
 source ~/.zshrc
 conda activate tkgdti
 cd /home/exacloud/gscratch/NGSdev/evans/TKG-DTI/scripts/
-python train_gnn.py --data $DATA --out $OUT --channels $c --conv $conv --num_workers 10 --layers $lay --dropout $d --lr $lr --epochs 100 --batch_size 1 --patience 5 --edge_dim 12 --residual 
+python train_gnn.py --data $DATA --out $OUT --channels $c --conv $conv --num_workers 10 --layers $lay --dropout $d --lr $lr --n_epochs 100 --batch_size 1 --patience 5 --edge_dim $edim --residual 
 
 EOF
 done
