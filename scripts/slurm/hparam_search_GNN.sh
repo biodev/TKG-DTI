@@ -8,7 +8,7 @@ N=1 # number of jobs for h param search to submit; "budget"
 lr_list=("0.001" "0.0001")
 do_list=("0")
 c_list=("32" "64")
-lay_list=("4" "6", "8")
+lay_list=("4" "6" "8")
 conv_list=("gat")
 
 mkdir $OUT
@@ -26,20 +26,19 @@ jobid=0
 # LIMITED HYPER-PARAMETER SEARCH ; randomly sample from possible params 
 for ((i=1; i<=N; i++)); do
         lr=$(echo "${lr_list[@]}" | tr ' ' '\n' | shuf -n 1)
-        do=$(echo "${do_list[@]}" | tr ' ' '\n' | shuf -n 1)
+        d=$(echo "${do_list[@]}" | tr ' ' '\n' | shuf -n 1)
         c=$(echo "${c_list[@]}" | tr ' ' '\n' | shuf -n 1)
         lay=$(echo "${lay_list[@]}" | tr ' ' '\n' | shuf -n 1)
         conv=$(echo "${conv_list[@]}" | tr ' ' '\n' | shuf -n 1)
 
         jobid=$((jobid+1))
 
-        echo "submitting job: GSNN (lr=$lr, do=$do, c=$c, lay=$lay, ase=$ase)"
+        echo "submitting job: GSNN (lr=$lr, do=$d, c=$c, lay=$lay, conv=$conv, jobid=$jobid)"
 
-        # SUBMIT SBATCH JOB 
+# SUBMIT SBATCH JOB 
 
-        sbatch <<EOF
-
-#!/bin/bash
+sbatch <<EOF
+#!/bin/zsh
 #SBATCH --job-name=tkgdti$jobid
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
@@ -54,10 +53,7 @@ for ((i=1; i<=N; i++)); do
 source ~/.zshrc
 conda activate tkgdti
 cd /home/exacloud/gscratch/NGSdev/evans/TKG-DTI/scripts/
-python train_gnn.py --data $DATA --out $OUT --channels $c --conv $conv --num_workers 10 --layers $lay --dropout $do --lr $lr --epochs 100 --batch_size 1 --patience 5 --edge_dim 12 --residual 
+python train_gnn.py --data $DATA --out $OUT --channels $c --conv $conv --num_workers 10 --layers $lay --dropout $d --lr $lr --epochs 100 --batch_size 1 --patience 5 --edge_dim 12 --residual 
 
 EOF
-done
-done
-done
 done
