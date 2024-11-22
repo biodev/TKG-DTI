@@ -3,6 +3,8 @@
 DATA=../data/heteroa/processed/FOLD_0/
 OUT=../output/hparam_search/FOLD_0/gnn/
 N=3 # number of jobs for h param search to submit; "budget"
+NEPOCHS=3
+TIME=01:00:00
 
 # parameter search grid
 lr_list=("0.01" "0.001" "0.0001")
@@ -43,7 +45,7 @@ sbatch <<EOF
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
-#SBATCH --time=12:00:00
+#SBATCH --time=$TIME
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
@@ -53,7 +55,7 @@ sbatch <<EOF
 source ~/.zshrc
 conda activate tkgdti
 cd /home/exacloud/gscratch/NGSdev/evans/TKG-DTI/scripts/
-python train_gnn.py --data $DATA --out $OUT --channels $c --conv $conv --num_workers 10 --layers $lay --dropout $d --lr $lr --n_epochs 100 --batch_size 1 --patience 5 --edge_dim $edim --residual 
+python train_gnn.py --data $DATA --out $OUT --channels $c --conv $conv --num_workers 10 --layers $lay --dropout $d --lr $lr --n_epochs $NEPOCHS --batch_size 1 --patience 5 --edge_dim $edim --residual 
 
 EOF
 done

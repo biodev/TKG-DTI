@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score, brier_score_loss
 from scipy.stats import rankdata
 
-def evaluate(df, ece_bins=10):
+def evaluate(df, ece_bins=10, partition='test'):
     """
     Evaluate model performance metrics on the given dataframe.
 
@@ -22,15 +22,15 @@ def evaluate(df, ece_bins=10):
     unique_drugs = df['drug_name'].unique()
 
     for i,drug in enumerate(unique_drugs):
-        print(f'evaluating test set, progress: {i}/{len(unique_drugs)}', end='\r')
+        print(f'evaluating {partition} set, progress: {i}/{len(unique_drugs)}', end='\r')
         # Filter dataframe for the current drug and relevant partitions
-        tmp = df[(df['drug_name'] == drug) & (df['test'] | df['negatives'])]
+        tmp = df[(df['drug_name'] == drug) & (df[partition] | df['negatives'])]
 
         # Skip if there are no positive test samples
-        if tmp['test'].astype(float).sum() < 1:
+        if tmp[partition].astype(float).sum() < 1:
             continue
 
-        y_true = tmp['test'].astype(float).values
+        y_true = tmp[partition].astype(float).values
         y_prob = tmp['prob'].values
 
         # Calculate AUROC and AUPRC
@@ -61,8 +61,8 @@ def evaluate(df, ece_bins=10):
     }
 
     # Calculate Expected Calibration Error (ECE)
-    y_true_all = df.loc[df['test'] | df['negatives'], 'test'].astype(float).values
-    y_prob_all = df.loc[df['test'] | df['negatives'], 'prob'].values
+    y_true_all = df.loc[df[partition] | df['negatives'], partition].astype(float).values
+    y_prob_all = df.loc[df[partition] | df['negatives'], 'prob'].values
 
     bin_edges = np.linspace(0.0, 1.0, ece_bins + 1)
     bin_indices = np.digitize(y_prob_all, bins=bin_edges, right=False)

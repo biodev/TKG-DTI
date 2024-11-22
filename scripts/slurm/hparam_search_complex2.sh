@@ -3,6 +3,8 @@
 DATA=../data/heteroa/processed/FOLD_0/
 OUT=../output/hparam_search/FOLD_0/complex2/
 N=3 # number of jobs for h param search to submit; "budget"
+NEPOCHS=5
+TIME=01:00:00
 
 # parameter search grid
 lr_list=("0.01" "0.001" "0.0001")
@@ -41,7 +43,7 @@ sbatch <<EOF
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
-#SBATCH --time=12:00:00
+#SBATCH --time=$TIME
 #SBATCH --mem=32G
 #SBATCH --gres=gpu:1
 #SBATCH --partition=gpu
@@ -51,6 +53,6 @@ sbatch <<EOF
 source ~/.zshrc
 conda activate tkgdti
 cd /home/exacloud/gscratch/NGSdev/evans/TKG-DTI/scripts/
-python train_complex2.py --data ../data/HeteroA/processed/FOLD_0 --out ../output/complex_test/ --num_workers 10 --lr $lr --channels $c --batch_size $batch --weight_decay $wd --n_epochs 100 --patience 5 --log_every 1 --target_relations 5
+python train_complex2.py --data $DATA --out $OUT --num_workers 10 --lr $lr --channels $c --batch_size $batch --wd $wd --n_epochs $NEPOCHS --patience 5 --log_every 1 --target_relations 5
 EOF
 done

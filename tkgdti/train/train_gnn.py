@@ -258,7 +258,29 @@ def train_gnn(config, kwargs=None):
     df = predict_all(data, tdata, train_triples, valid_triples, test_triples, best_model, device)
     df.to_csv(f'{kwargs.out}/predictions.csv', index=False)
 
-    test_metrics = evaluate(df) 
+    #val metrics 
+    val_metrics = evaluate(df, partition='valid') 
+
+    print('valid set metrics:')
+    print(val_metrics)
+
+    val_metrics['uid'] = uid
+    val_metrics = {**config, **val_metrics}
+
+    torch.save(val_metrics, f'{kwargs.out}/valid_metrics.pt')
+
+    metrics_df = pd.DataFrame(val_metrics, index=[0])
+
+    try: 
+        if os.path.exists(f'{root_out}/valid_metrics.csv'): 
+            metrics_df.to_csv(f'{root_out}/valid_metrics.csv', mode='a', header=False, index=False)
+        else:
+            metrics_df.to_csv(f'{root_out}/valid_metrics.csv', index=False)
+    except:
+        raise 
+    
+    # test metrics 
+    test_metrics = evaluate(df, partition='test') 
 
     print('test set metrics:')
     print(test_metrics)
@@ -271,10 +293,10 @@ def train_gnn(config, kwargs=None):
     metrics_df = pd.DataFrame(test_metrics, index=[0])
 
     try: 
-        if os.path.exists(f'{root_out}/metrics.csv'): 
-            metrics_df.to_csv(f'{root_out}/metrics.csv', mode='a', header=False, index=False)
+        if os.path.exists(f'{root_out}/test_metrics.csv'): 
+            metrics_df.to_csv(f'{root_out}/test_metrics.csv', mode='a', header=False, index=False)
         else:
-            metrics_df.to_csv(f'{root_out}/metrics.csv', index=False)
+            metrics_df.to_csv(f'{root_out}/test_metrics.csv', index=False)
     except:
         raise 
 
