@@ -3,7 +3,7 @@
 DATA=../data/heteroa/processed/FOLD_0/
 OUT=../output/hparam_search/FOLD_0/complex2/
 N=25 # number of jobs for h param search to submit; "budget"
-NEPOCHS=100
+NEPOCHS=500
 TIME=04:00:00
 
 # parameter search grid
@@ -39,7 +39,7 @@ for ((i=1; i<=N; i++)); do
 
 sbatch <<EOF
 #!/bin/zsh
-#SBATCH --job-name=complex$jobid
+#SBATCH --job-name=cp2$jobid
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12

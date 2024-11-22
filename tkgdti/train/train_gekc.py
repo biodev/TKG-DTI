@@ -133,7 +133,7 @@ def train_gekc(config, kwargs=None):
                                                shuffle=False, 
                                                persistent_workers=True)
     
-    stopper = EarlyStopper(kwargs.patience)
+    stopper = EarlyStopper(kwargs.patience, min_delta=0)
 
     best_model = None
     best_topat10 = -np.inf
