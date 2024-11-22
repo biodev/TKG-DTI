@@ -2,9 +2,9 @@
 
 DATA=../data/heteroa/processed/FOLD_0/
 OUT=../output/hparam_search/FOLD_0/complex2/
-N=3 # number of jobs for h param search to submit; "budget"
-NEPOCHS=5
-TIME=01:00:00
+N=25 # number of jobs for h param search to submit; "budget"
+NEPOCHS=100
+TIME=04:00:00
 
 # parameter search grid
 lr_list=("0.01" "0.001" "0.0001")
