@@ -1,16 +1,15 @@
 #/bin/zsh
 
 DATA=../data/heteroa/processed/FOLD_0/
-OUT=../output/hparam_search/FOLD_0/gnn/
+OUT=../output/hparam_search/FOLD_0/complex2/
 N=3 # number of jobs for h param search to submit; "budget"
 
 # parameter search grid
 lr_list=("0.01" "0.001" "0.0001")
-do_list=("0" "0.1")
-c_list=("32" "64")
-lay_list=("5" "6" "7")
-conv_list=("gat" "transformer")
-edge_dim_list=("4" "8" "12")
+c_list=("256" "512" "1024")
+batch_list=("5000" "25000" "50000")
+wd_list=("0" "1e-6" "1e-9")
+
 mkdir $OUT
 
 OUT2=../$OUT/slurm_logs__GNN/
@@ -26,20 +25,19 @@ jobid=0
 # LIMITED HYPER-PARAMETER SEARCH ; randomly sample from possible params 
 for ((i=1; i<=N; i++)); do
         lr=$(echo "${lr_list[@]}" | tr ' ' '\n' | shuf -n 1)
-        d=$(echo "${do_list[@]}" | tr ' ' '\n' | shuf -n 1)
         c=$(echo "${c_list[@]}" | tr ' ' '\n' | shuf -n 1)
-        lay=$(echo "${lay_list[@]}" | tr ' ' '\n' | shuf -n 1)
-        conv=$(echo "${conv_list[@]}" | tr ' ' '\n' | shuf -n 1)
-	edim=$(echo "${edge_dim_list[@]}" | tr ' ' '\n' | shuf -n 1)
+        batch=$(echo "${batch_list[@]}" | tr ' ' '\n' | shuf -n 1)
+        wd=$(echo "${wd_list[@]}" | tr ' ' '\n' | shuf -n 1)
         jobid=$((jobid+1))
 
-        echo "submitting job: KGDTI - GNN (lr=$lr, do=$d, c=$c, lay=$lay, conv=$conv, edge dim=$edim, jobid=$jobid)"
+        #echo "submitting job: KGDTI - GNN (lr=$lr, do=$d, c=$c, lay=$lay, conv=$conv, edge dim=$edim, jobid=$jobid)"
+        echo "submitting job: KGDTI - GNN (lr=$lr, c=$c, batch=$batch, wd=$wd, jobid=$jobid)"
 
 # SUBMIT SBATCH JOB 
 
 sbatch <<EOF
 #!/bin/zsh
-#SBATCH --job-name=gnn$jobid
+#SBATCH --job-name=complex$jobid
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=12
@@ -53,7 +51,6 @@ sbatch <<EOF
 source ~/.zshrc
 conda activate tkgdti
 cd /home/exacloud/gscratch/NGSdev/evans/TKG-DTI/scripts/
-python train_gnn.py --data $DATA --out $OUT --channels $c --conv $conv --num_workers 10 --layers $lay --dropout $d --lr $lr --n_epochs 100 --batch_size 1 --patience 5 --edge_dim $edim --residual 
-
+python train_complex2.py --data ../data/HeteroA/processed/FOLD_0 --out ../output/complex_test/ --num_workers 10 --lr $lr --channels $c --batch_size $batch --weight_decay $wd --n_epochs 100 --patience 5 --log_every 1 --target_relations 5
 EOF
 done

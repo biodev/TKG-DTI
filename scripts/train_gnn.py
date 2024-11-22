@@ -64,8 +64,3 @@ if __name__ == '__main__':
               }
     
     model = train_gnn(config, args)
-
-    print('Predicting all edge scores...')
-
-    
-

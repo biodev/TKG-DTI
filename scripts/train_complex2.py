@@ -48,8 +48,3 @@ if __name__ == '__main__':
               'dropout':args.dropout}
     
     model = train_gekc(config, args)
-
-    print('Predicting all edge scores...')
-
-    
-

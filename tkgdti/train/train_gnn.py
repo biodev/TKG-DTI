@@ -13,6 +13,7 @@ from tkgdti.train.EarlyStopper import EarlyStopper
 import pandas as pd 
 import uuid 
 import os 
+from tkgdti.eval.evaluate import evaluate
 
 # BUG: "RuntimeError: received 0 items of ancdata" (fix: https://stackoverflow.com/questions/71642653/how-to-resolve-the-error-runtimeerror-received-0-items-of-ancdata)
 import resource
@@ -94,6 +95,7 @@ def predict_all(data, tdata, train_triples, valid_triples, test_triples, model, 
 
 
 def eval(loader, model, prot_idx, device='cpu', deterministic=True): 
+    # approximate evaluation; doesn't remove positive samples during eval 
     if deterministic: model.eval()
     pyhats = [] 
     pys = []
@@ -130,6 +132,7 @@ def train_gnn(config, kwargs=None):
     uid = uuid.uuid4()
     print(f'uid: {uid}')
     os.makedirs(kwargs.out + '/' + str(uid), exist_ok=True)
+    root_out = kwargs.out
     kwargs.out = kwargs.out + '/' + str(uid)
 
     device, data, train_triples, valid_triples, valid_neg_triples, test_triples, test_neg_triples  = device_and_data_loading(kwargs, return_test=True)
@@ -190,7 +193,7 @@ def train_gnn(config, kwargs=None):
     stopper = EarlyStopper(patience=kwargs.patience, min_delta=0.)
 
     best_model = None
-    best_topat10 = 0 
+    best_topat10 = -np.inf 
 
     metrics = {'mrr':[], 'top@10':[], 'top@100':[], 'auroc':[]}
 
@@ -254,6 +257,32 @@ def train_gnn(config, kwargs=None):
 
     df = predict_all(data, tdata, train_triples, valid_triples, test_triples, best_model, device)
     df.to_csv(f'{kwargs.out}/predictions.csv', index=False)
+
+    test_metrics = evaluate(df) 
+
+    print('test set metrics:')
+    print(test_metrics)
+
+    test_metrics['uid'] = uid
+    test_metrics = {**config, **test_metrics}
+
+    torch.save(test_metrics, f'{kwargs.out}/test_metrics.pt')
+
+    metrics_df = pd.DataFrame(test_metrics, index=[0])
+
+    try: 
+        if os.path.exists(f'{root_out}/metrics.csv'): 
+            metrics_df.to_csv(f'{root_out}/metrics.csv', mode='a', header=False, index=False)
+        else:
+            metrics_df.to_csv(f'{root_out}/metrics.csv', index=False)
+    except:
+        raise 
+
+    with open(f'{kwargs.out}/completed.txt', 'w') as f: 
+        f.write(f'{uid}\n')
+
+
+
 
 
     

@@ -39,5 +39,6 @@ While we can conveniently batch observations, it does require unique knowledge g
 
 - Currently every triple (drug-target link) is treated as a unique observation, however, this could be improved by aggregating all DTIs that involve a given drug by setting a multiple nonzero targets (`y` values). It is unclear how much of an impact this would have on training as there are only ~1000 observations and ~700 drugs, suggesting that most drugs have only 1-2 known drug targets. 
 
+## Note on evaluation during training 
 
-
+During training we evaluate performance on the validation set, however, we do not remove the training or test dtis, and therefore the performance metrics will be slightly lower than the true performance behaviors. We evaluate the true metrics on the test set after training. 
