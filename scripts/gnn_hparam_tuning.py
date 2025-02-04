@@ -105,8 +105,11 @@ if __name__ == '__main__':
         
         uid, val_metrics, test_metrics = train_gnn(config, copy.deepcopy(args))
 
+        val_metrics = {f'val_{k}':v for k,v in val_metrics.items()}
+        test_metrics = {f'test_{k}':v for k,v in test_metrics.items()}
+
         # save results to disk 
-        res = pd.DataFrame({**config, **test_metrics, 'uid':uid}, index=[0])
+        res = pd.DataFrame({**config, **val_metrics, **test_metrics, 'uid':uid}, index=[0])
 
         if os.path.exists(args.out + '/hparam_test_results.csv'): 
             res.to_csv(args.out + '/hparam_test_results.csv', mode='a', header=False, index=False)
