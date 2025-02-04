@@ -21,7 +21,7 @@ sbatch <<EOF
 #SBATCH --output=$OUT2/log.%j.out
 #SBATCH --error=$OUT2/log.%j.err
 
-source ~/.zshrc
+cd .. 
 conda activate tkgdti
 python gnn_hparam_tuning.py --data $DATA --out $OUT --n_runs $N --searchspace $SEARCHSPACE --patience $PATIENCE
 
