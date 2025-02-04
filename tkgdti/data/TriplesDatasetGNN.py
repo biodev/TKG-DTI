@@ -11,13 +11,14 @@ import torch_geometric as pyg
 class TriplesDatasetGNN(Dataset):
     """"""
 
-    def __init__(self, triples, edge_index_dict, channels, num_node_dict, filter_to_relation=None):
+    def __init__(self, triples, edge_index_dict, channels, num_node_dict, target_relation, filter_to_relation=None):
         """
 
         """
         self.channels = channels
         self.num_node_dict = num_node_dict
         self.edge_index_dict = edge_index_dict
+        self.target_relation = target_relation
 
         self.pos_heads = torch.tensor(triples['head'], dtype=torch.long)
         self.pos_tails = torch.tensor(triples['tail'], dtype=torch.long)
@@ -41,18 +42,18 @@ class TriplesDatasetGNN(Dataset):
         pos_relation = self.pos_relations[idx].detach()
 
         x_dict = copy.deepcopy(self.x_dict)
-        x_dict['drug'][pos_head] = torch.ones((self.channels,), dtype=torch.float32)
+        x_dict[self.target_relation[0]][pos_head] = torch.ones((self.channels,), dtype=torch.float32)
 
         edge_index_dict = copy.deepcopy(self.edge_index_dict)
-        edge_index = edge_index_dict['drug', 'drug->target->protein', 'protein']
-        mask = ~((edge_index[0] == pos_head) & (edge_index[1] == pos_tail))
-        edge_index_dict['drug', 'drug->target->protein', 'protein'] = edge_index[:, mask]
+        edge_index = edge_index_dict[self.target_relation]
+        mask = ~((edge_index[0] == pos_head) & (edge_index[1] == pos_tail))   # remove training data edge from edge_index
+        edge_index_dict[self.target_relation] = edge_index[:, mask]
 
         y_dict = {node:torch.zeros((1,num_nodes), dtype=torch.float32) for node, num_nodes in self.num_node_dict.items()}
 
-        y = torch.zeros((1, self.num_node_dict['protein']), dtype=torch.float32)
+        y = torch.zeros((1, self.num_node_dict[self.target_relation[-1]]), dtype=torch.float32)
         y[:, pos_tail] = 1
-        y_dict['protein'] = y   
+        y_dict[self.target_relation[-1]] = y   
 
         # Create a HeteroData object for this instance
         data = pyg.data.HeteroData()

@@ -10,51 +10,67 @@ from sklearn.metrics import roc_auc_score
 import pandas as pd
 import uuid
 from tkgdti.eval.evaluate import evaluate
+import copy
 
-def predict_all(data, train_triples, valid_triples, test_triples, model, device, batch_size=10000): 
+# BUG FIX: https://stackoverflow.com/questions/77900971/pandas-futurewarning-downcasting-object-dtype-arrays-on-fillna-ffill-bfill
+pd.set_option('future.no_silent_downcasting', True)
 
-    ndrugs = data['num_nodes_dict']['drug']
-    nprots = data['num_nodes_dict']['protein']
+def predict_all(data, train_triples, valid_triples, test_triples, model, device, 
+                batch_size=10000, target_relint=None, head_target='drug', tail_target='protein',
+                verbose=True): 
+
+    ndrugs = data['num_nodes_dict'][head_target]
+    nprots = data['num_nodes_dict'][tail_target]
 
     heads = [] 
     tails = [] 
-    for i in range(ndrugs): 
-        for j in range(nprots): 
+
+    _is = range(ndrugs)
+    _js = np.arange(nprots)
+
+    for i in _is: 
+        for j in _js: 
             heads.append(i)
             tails.append(j)
     heads = torch.tensor(heads, dtype=torch.long)
     tails = torch.tensor(tails, dtype=torch.long)
-    relations = torch.tensor([5]*len(heads), dtype=torch.long)
+    relations = torch.tensor([target_relint]*len(heads), dtype=torch.long)
 
     scores = [] 
     with torch.no_grad():
         for idx in torch.split(torch.arange(len(heads)), batch_size):
-            print(f'predicting all DTIs... progress: {idx[0].item()}/{len(heads)}', end='\r')
-            out = model.forward(head=heads[idx].to(device), relation=relations[idx].to(device), tail=tails[idx].to(device))
+            if verbose: print(f'[progress: {idx[0].item()}/{len(heads)}]', end='\r')
+            out = model(head=heads[idx].to(device), 
+                        relation=relations[idx].to(device), 
+                        tail=tails[idx].to(device))
             scores.append(out.detach().cpu())
 
     scores = torch.cat(scores)
 
-    dti_mask = train_triples['relation'] == 5
-    train_heads = train_triples['head'][dti_mask]
-    train_tails = train_triples['tail'][dti_mask]
-
     heads = heads.detach().cpu().numpy()
     tails = tails.detach().cpu().numpy()
     scores = scores.detach().cpu().numpy()
+    
+    df = pd.DataFrame({'drug': heads, 'protein': tails, 'score': scores.ravel(), 
+                       'drug_name': np.array(data['node_name_dict'][head_target])[heads], 
+                       'prot_name': np.array(data['node_name_dict'][tail_target])[tails],
+                       'drug_name': np.array(data['node_name_dict'][head_target])[heads], 
+                       'prot_name': np.array(data['node_name_dict'][tail_target])[tails]})
 
-    df = pd.DataFrame({'drug': heads, 'protein': tails, 'score': scores.ravel(), 'drug_name': np.array(data['node_name_dict']['drug'])[heads], 'prot_name': np.array(data['node_name_dict']['protein'])[tails]})
+    dti_mask = train_triples['relation'] == target_relint
+    train_heads = train_triples['head'][dti_mask]
+    train_tails = train_triples['tail'][dti_mask]
+    train_links = set(zip(train_heads, train_tails))
+    df['train'] = [True if (h,t) in train_links else False for h,t in zip(heads, tails)]
 
-    _train = pd.DataFrame({'drug': train_heads, 'protein': train_tails, 'train': True})
-    df = df.merge(_train, on=['drug', 'protein'], how='left')
+    valid_links = set(zip(valid_triples['head'], valid_triples['tail']))
+    df['valid'] = [True if (h,t) in valid_links else False for h,t in zip(heads, tails)]
 
-    _valid = pd.DataFrame({'drug': valid_triples['head'], 'protein': valid_triples['tail'], 'valid': True})
-    df = df.merge(_valid, on=['drug', 'protein'], how='left')
+    test_links = set(zip(test_triples['head'], test_triples['tail']))
+    df['test'] = [True if (h,t) in test_links else False for h,t in zip(heads, tails)]
 
-    _test = pd.DataFrame({'drug': test_triples['head'], 'protein': test_triples['tail'], 'test': True})
-    df = df.merge(_test, on=['drug', 'protein'], how='left')
-
-    df = df.fillna(False)
+    # BUG FIX: https://stackoverflow.com/questions/77900971/pandas-futurewarning-downcasting-object-dtype-arrays-on-fillna-ffill-bfill
+    df = df.infer_objects(copy=False).fillna(False)
 
     df = df.assign(negatives = ~(df['train'] | df['valid'] | df['test']))
 
@@ -64,38 +80,18 @@ def predict_all(data, train_triples, valid_triples, test_triples, model, device,
     return df
 
 
-def eval(loader, model, device='cpu', nneg=1000): 
+def eval(data, train_triples, valid_triples, test_triples, model, device, batch_size, 
+         target_relint, head_target, tail_target, partition='valid'):
     
-    ranks = [] 
-    y = [] 
-    yhat = []
-    for i, (pos_head, pos_tail, pos_relation) in enumerate(loader):
+    df = predict_all(data, train_triples, valid_triples, test_triples, model, device, batch_size=batch_size,
+                    target_relint=target_relint, head_target=head_target, tail_target=tail_target, verbose=True)
 
-        print(f'val batch [{i}/{len(loader)}]', end='\r')
-        with torch.no_grad(): 
+    _metrics = evaluate(df, partition=partition, verbose=False)
 
-            pos_head = pos_head.to(device)
-            pos_tail = pos_tail.to(device)
-            pos_relation = pos_relation.to(device)
-
-            pos_scores = model.forward(head=pos_head, relation=pos_relation, tail=pos_tail).squeeze(-1)
-
-            pos_head_ = pos_head.view(-1, 1).expand(-1, nneg).contiguous().view(-1)
-            pos_relation_ = pos_relation.view(-1, 1).expand(-1, nneg).contiguous().view(-1)
-            neg_tail = torch.randint(0, model.data['num_nodes_dict']['protein'], (pos_head.size(0), nneg)).to(device).view(-1)
-            neg_scores = model.forward(head=pos_head_, relation=pos_relation_, tail=neg_tail).view(-1, nneg)
-
-            ranks.append( (neg_scores >= pos_scores.view(-1, 1)).sum(-1) + 1 )
-            y.append( torch.cat((torch.ones_like(pos_scores), torch.zeros_like(neg_scores.view(-1))), dim=-1) )
-            yhat.append( torch.cat([pos_scores, neg_scores.view(-1)], dim=-1) )
-            
-    y = torch.cat(y, dim=0)
-    yhat = torch.cat(yhat, dim=0)
-    ranks = torch.cat(ranks, dim=0)
-    mrr = (1/ranks.float()).mean().item()
-    topat10 = (ranks <= 10).float().mean().item()
-    topat100 = (ranks <= 100).float().mean().item()
-    auroc = roc_auc_score(y.detach().cpu().numpy(), yhat.detach().cpu().numpy())
+    mrr = _metrics['MRR']
+    topat10 = _metrics['Top10']
+    topat100 = _metrics['Top100']
+    auroc = _metrics['avg_AUC']
 
     return mrr, topat10, topat100, auroc
 
@@ -112,6 +108,21 @@ def train_gekc(config, kwargs=None):
     kwargs.out = kwargs.out + '/' + str(uid)
 
     device, data, train_triples, valid_triples, valid_neg_triples, test_triples, test_neg_triples = device_and_data_loading(kwargs, return_test=True)
+
+    if kwargs.use_cpu: 
+        device = 'cpu'
+
+    rel2int = {k:v[0] for k,v in data.edge_reltype.items()}
+    target_relint = rel2int[kwargs.target_relation]
+    if type(target_relint) is not int: target_relint = target_relint.item()
+    head_target, _ , tail_target = kwargs.target_relation
+    
+    print() 
+    print('---------------------------------')
+    print('target relation: ', kwargs.target_relation)
+    print('target relation int: ', target_relint)
+    print('---------------------------------')
+    print()
 
     model = ComplEx2(data            = data, 
                         hidden_channels  = config['channels'], 
@@ -135,8 +146,8 @@ def train_gekc(config, kwargs=None):
     
     stopper = EarlyStopper(kwargs.patience, min_delta=0)
 
-    best_model = None
-    best_topat10 = -np.inf
+    best_model_state_dict = None
+    best_metric = -np.inf
 
     metrics = {'mrr':[], 'top@10':[], 'top@100':[], 'auroc':[]}
 
@@ -167,19 +178,29 @@ def train_gekc(config, kwargs=None):
 
             tic = time.time()
 
-            mrr, topat10, topat100, auroc = eval(valid_loader, model, device=device)
+            #mrr, topat10, topat100, auroc = eval(valid_loader, model, device=device, tail_target=tail_target)
+            mrr, topat10, topat100, auroc = eval(data, 
+                                                 train_triples, 
+                                                 valid_triples, 
+                                                 test_triples, 
+                                                 model, 
+                                                 device, 
+                                                 kwargs.batch_size, 
+                                                 target_relint, 
+                                                 head_target, 
+                                                 tail_target)
             metrics['mrr'].append(mrr)
             metrics['top@10'].append(topat10)
             metrics['top@100'].append(topat100)
             metrics['auroc'].append(auroc)
 
-            if best_topat10 < topat10:
-                best_topat10 = topat10
-                best_model = model
+            if best_metric <= metrics[kwargs.target_metric][-1]:
+                best_metric = metrics[kwargs.target_metric][-1]
+                best_model_state_dict = copy.deepcopy(model.state_dict())
 
             print(f'Epoch: {epoch} -{"-"*15}> mean loss (train): {tot_loss/(i+1):.3f} || (valid) MRR: {mrr:.4f} || top@(10, 100): ({topat10:.3f},{topat100:.3f}) || AUROC: {auroc:.4f} || elapsed: {elapsed:.3f} sec')
 
-            out_dict = {'best_model': best_model.state_dict(),
+            out_dict = {'best_model': best_model_state_dict,
                         'args': kwargs,
                         'config': config,
                         'metrics': metrics,
@@ -192,15 +213,20 @@ def train_gekc(config, kwargs=None):
             
             torch.save(out_dict, f'{kwargs.out}/results.pt')
 
-            if stopper.step(-topat10): 
+            if stopper.step(-metrics[kwargs.target_metric][-1]): 
                 print('early stopping @ epoch ', epoch)
                 break
+    
+    best_model = model 
+    best_model.load_state_dict(best_model_state_dict)
 
-    df = predict_all(data, train_triples, valid_triples, test_triples, model, device, batch_size=kwargs.batch_size)
+    df = predict_all(data, train_triples, valid_triples, test_triples, best_model, device, batch_size=kwargs.batch_size,
+                     target_relint=target_relint, head_target=head_target, tail_target=tail_target)
+    
     df.to_csv(f'{kwargs.out}/predictions.csv', index=False)
 
     #val metrics 
-    val_metrics = evaluate(df, partition='valid') 
+    val_metrics = evaluate(df, partition='valid')
 
     print('valid set metrics:')
     print(val_metrics)
@@ -221,7 +247,7 @@ def train_gekc(config, kwargs=None):
         raise 
     
     # test metrics 
-    test_metrics = evaluate(df, partition='test') 
+    test_metrics = evaluate(df, partition='test')
 
     print('test set metrics:')
     print(test_metrics)
@@ -243,3 +269,50 @@ def train_gekc(config, kwargs=None):
 
     with open(f'{kwargs.out}/completed.txt', 'w') as f: 
         f.write(f'{uid}\n')
+
+
+
+
+
+
+
+'''
+deprecated 
+
+
+def eval(loader, model, device='cpu', nneg=10000, tail_target='protein'): 
+    
+    ranks = [] 
+    y = [] 
+    yhat = []
+    for i, (pos_head, pos_tail, pos_relation) in enumerate(loader):
+
+        print(f'val batch [{i}/{len(loader)}]', end='\r')
+        with torch.no_grad(): 
+
+            pos_head = pos_head.to(device)
+            pos_tail = pos_tail.to(device)
+            pos_relation = pos_relation.to(device)
+
+            pos_scores = model.forward(head=pos_head, relation=pos_relation, tail=pos_tail).squeeze(-1)
+
+            pos_head_ = pos_head.view(-1, 1).expand(-1, nneg).contiguous().view(-1)
+            pos_relation_ = pos_relation.view(-1, 1).expand(-1, nneg).contiguous().view(-1)
+            neg_tail = torch.randint(0, model.data['num_nodes_dict'][tail_target], (pos_head.size(0), nneg)).to(device).view(-1)
+            neg_scores = model.forward(head=pos_head_, relation=pos_relation_, tail=neg_tail).view(-1, nneg)
+
+            ranks.append( (neg_scores >= pos_scores.view(-1, 1)).sum(-1) + 1 )
+            y.append( torch.cat((torch.ones_like(pos_scores), torch.zeros_like(neg_scores.view(-1))), dim=-1) )
+            yhat.append( torch.cat([pos_scores, neg_scores.view(-1)], dim=-1) )
+            
+    y = torch.cat(y, dim=0)
+    yhat = torch.cat(yhat, dim=0)
+    ranks = torch.cat(ranks, dim=0)
+    mrr = (1/ranks.float()).mean().item()
+    topat10 = (ranks <= 10).float().mean().item()
+    topat100 = (ranks <= 100).float().mean().item()
+    auroc = roc_auc_score(y.detach().cpu().numpy(), yhat.detach().cpu().numpy())
+
+    return mrr, topat10, topat100, auroc
+
+'''

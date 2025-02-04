@@ -4,30 +4,42 @@ import torch_geometric as pyg
 import copy
 from torch_geometric.data import HeteroData, Batch 
 
-def process_graph(data): 
+def process_graph(data, heteroA=False): 
 
     tdata = pyg.data.HeteroData()
 
-    for key, edge_index  in data['edge_index_dict'].items(): 
-        
-        edge_index = torch.tensor(edge_index, dtype=torch.long)
-        if key[0] == key[2]: 
-            if not pyg.utils.is_undirected(edge_index): 
-                edge_index = pyg.utils.to_undirected(edge_index)
 
-        tdata[key].edge_index = edge_index 
+    if heteroA: 
+        # HeteroA does not have undirected edges as it currently stands, this is a workaround to add relevant undirected edges 
+        for key, edge_index in data['edge_index_dict'].items(): 
+            
+            edge_index = torch.tensor(edge_index, dtype=torch.long)
+            if key[0] == key[2]: 
+                if not pyg.utils.is_undirected(edge_index): 
+                    edge_index = pyg.utils.to_undirected(edge_index)
 
-    for node, names in data['node_name_dict'].items(): 
-        tdata[node].names = names 
-        tdata[node].num_nodes = len(names)
+            tdata[key].edge_index = edge_index 
 
-    row,col = torch.tensor(data['edge_index_dict']['protein', 'protein->association->disease', 'disease'], dtype=torch.long)
-    rev_edge_index = torch.stack([col, row], dim=0)
-    tdata['disease', 'disease->association->protein', 'protein'].edge_index = rev_edge_index
+        for node, names in data['node_name_dict'].items(): 
+            tdata[node].names = names 
+            tdata[node].num_nodes = len(names)
 
-    row,col = torch.tensor(data['edge_index_dict']['drug', 'drug->association->se', 'se'], dtype=torch.long)
-    rev_edge_index = torch.stack([col, row], dim=0)
-    tdata['se', 'se->association->drug', 'drug'].edge_index = rev_edge_index 
+        row,col = torch.tensor(data['edge_index_dict']['protein', 'protein->association->disease', 'disease'], dtype=torch.long)
+        rev_edge_index = torch.stack([col, row], dim=0)
+        tdata['disease', 'disease->association->protein', 'protein'].edge_index = rev_edge_index
+
+        row,col = torch.tensor(data['edge_index_dict']['drug', 'drug->association->se', 'se'], dtype=torch.long)
+        rev_edge_index = torch.stack([col, row], dim=0)
+        tdata['se', 'se->association->drug', 'drug'].edge_index = rev_edge_index 
+
+    else: 
+        # For TKG, we have designed it to have all reversed or undirected edges. 
+        for key, edge_index in data['edge_index_dict'].items(): 
+            tdata[key].edge_index = torch.tensor(edge_index, dtype=torch.long)
+
+        for node, names in data['node_name_dict'].items(): 
+            tdata[node].names = names 
+            tdata[node].num_nodes = len(names)
 
     del tdata['edge_index']
     del tdata['num_nodes']

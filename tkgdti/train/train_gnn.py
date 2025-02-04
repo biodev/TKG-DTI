@@ -14,24 +14,31 @@ import pandas as pd
 import uuid 
 import os 
 from tkgdti.eval.evaluate import evaluate
+import copy
 
 # BUG: "RuntimeError: received 0 items of ancdata" (fix: https://stackoverflow.com/questions/71642653/how-to-resolve-the-error-runtimeerror-received-0-items-of-ancdata)
-import resource
-rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (2048, rlimit[1]))
+#import resource
+#rlimit = resource.getrlimit(resource.RLIMIT_NOFILE)
+#resource.setrlimit(resource.RLIMIT_NOFILE, (4096, rlimit[1]))
+import torch.multiprocessing
+torch.multiprocessing.set_sharing_strategy('file_system')
 
 
-def predict_all(data, tdata, train_triples, valid_triples, test_triples, model, device): 
+def predict_all(data, tdata, target_relation, target_relint, train_triples, valid_triples, test_triples, model, device): 
+
+    head_target, rel_target, tail_target = target_relation
+
+    model.eval() 
 
     edge_index_dict = {key: tdata[key]['edge_index'] for key in tdata.metadata()[1]}
     num_node_dict = {key: tdata[key].num_nodes for key in tdata.metadata()[0]}
 
     datas = []
-    for i in range(data['num_nodes_dict']['drug']):
+    for i in range(data['num_nodes_dict'][head_target]):
         head = i 
         x_dict = {node:torch.zeros((num_nodes, 1), dtype=torch.float32) for node, num_nodes in num_node_dict.items()}
 
-        x_dict['drug'][head] = torch.ones((1,), dtype=torch.float32)
+        x_dict[head_target][head] = torch.ones((1,), dtype=torch.float32)
 
         edge_index_dict = edge_index_dict
 
@@ -49,7 +56,7 @@ def predict_all(data, tdata, train_triples, valid_triples, test_triples, model, 
 
         datas.append(dat)
 
-    prot_idx = tdata.metadata()[0].index('protein')
+    prot_idx = tdata.metadata()[0].index(tail_target)
 
     pidxs = [] 
     didxs = []
@@ -65,28 +72,33 @@ def predict_all(data, tdata, train_triples, valid_triples, test_triples, model, 
             pidxs.append( torch.arange(out[prot_mask].size(0))) 
             didxs.append( torch.ones(out[prot_mask].size(0)) * i)
 
-    probs = torch.cat(probs).detach().cpu().numpy()
-    pidxs = torch.cat(pidxs).detach().cpu().numpy()
-    didxs = torch.cat(didxs).detach().cpu().numpy()
+    probs = torch.cat(probs, dim=0).detach().cpu().numpy()
+    pidxs = torch.cat(pidxs, dim=0).detach().cpu().numpy().astype(int)
+    didxs = torch.cat(didxs, dim=0).detach().cpu().numpy().astype(int)
 
-    didxs = torch.tensor(didxs, dtype=torch.long)
+    #didxs = torch.tensor(didxs, dtype=torch.long)
 
-    dti_mask = train_triples['relation'] == 5
+    dti_mask = train_triples['relation'] == target_relint
     train_heads = train_triples['head'][dti_mask]
     train_tails = train_triples['tail'][dti_mask]
 
-    df = pd.DataFrame({'drug': didxs, 'protein': pidxs, 'prob': probs.ravel(), 'drug_name': np.array(data['node_name_dict']['drug'])[didxs], 'prot_name': np.array(data['node_name_dict']['protein'])[pidxs]})
+    df = pd.DataFrame({'drug': didxs, 'protein': pidxs, 
+                       'score': probs.ravel(), 
+                       'prob': probs.ravel(),
+                       'drug_name': np.array(data['node_name_dict'][head_target])[didxs], 
+                       'prot_name': np.array(data['node_name_dict'][tail_target])[pidxs]})
 
-    _train = pd.DataFrame({'drug': train_heads, 'protein': train_tails, 'train': True})
-    df = df.merge(_train, on=['drug', 'protein'], how='left')
+    train_links = set(zip(train_heads, train_tails))
+    df['train'] = [True if (h,t) in train_links else False for h,t in zip(didxs, pidxs)]
 
-    _valid = pd.DataFrame({'drug': valid_triples['head'], 'protein': valid_triples['tail'], 'valid': True})
-    df = df.merge(_valid, on=['drug', 'protein'], how='left')
+    valid_links = set(zip(valid_triples['head'], valid_triples['tail']))
+    df['valid'] = [True if (h,t) in valid_links else False for h,t in zip(didxs, pidxs)]
 
-    _test = pd.DataFrame({'drug': test_triples['head'], 'protein': test_triples['tail'], 'test': True})
-    df = df.merge(_test, on=['drug', 'protein'], how='left')
+    test_links = set(zip(test_triples['head'], test_triples['tail']))
+    df['test'] = [True if (h,t) in test_links else False for h,t in zip(didxs, pidxs)]
 
-    df = df.fillna(False)
+    # BUG FIX: https://stackoverflow.com/questions/77900971/pandas-futurewarning-downcasting-object-dtype-arrays-on-fillna-ffill-bfill
+    df = df.infer_objects(copy=False).fillna(False)
 
     df = df.assign(negatives = ~(df['train'] | df['valid'] | df['test']))
 
@@ -94,35 +106,19 @@ def predict_all(data, tdata, train_triples, valid_triples, test_triples, model, 
 
 
 
-def eval(loader, model, prot_idx, device='cpu', deterministic=True): 
-    # approximate evaluation; doesn't remove positive samples during eval 
-    if deterministic: model.eval()
-    pyhats = [] 
-    pys = []
-    for i,batch in enumerate(loader): 
-        print(f'val batch [{i}/{len(loader)}]', end='\r')
-        B = batch.y_protein.shape[0]
-        with torch.no_grad(): 
-            batch = batch.to_homogeneous()
-            x = batch.x.to(device)
-            y = batch.y.to(device)
+def eval(data, tdata, target_relation, target_relint, train_triples, valid_triples, test_triples, model, device='cpu', partition='valid'): 
 
-            out = model(x, batch.edge_index.to(device), batch.edge_type.to(device))
-            prot_mask = batch.node_type == prot_idx
-            pout = out[prot_mask].view(B, -1)
-            py = y[prot_mask].view(B, -1)
-            pyhats.append(pout.detach().cpu())
-            pys.append(py.detach().cpu())
-            
-    py = torch.cat(pys, dim=0)
-    pout = torch.cat(pyhats, dim=0)
-    ranks = (pout[py.nonzero(as_tuple=True)].view(-1,1) <= pout).sum(-1)
-    mrr = (1/ranks).mean().item()
-    topat10 = (ranks <= 10).float().mean().item()
-    topat100 = (ranks <= 100).float().mean().item()
-    auroc = roc_auc_score(py.detach().cpu().numpy().ravel(), pout.detach().cpu().numpy().ravel())
+    df = predict_all(data, tdata, target_relation, target_relint, train_triples, valid_triples, test_triples, model, device)
+    
+    _metrics = evaluate(df, partition=partition, verbose=False)
+
+    mrr = _metrics['MRR']
+    topat10 = _metrics['Top10']
+    topat100 = _metrics['Top100']
+    auroc = _metrics['avg_AUC']
 
     return mrr, topat10, topat100, auroc
+
 
 
 
@@ -137,14 +133,28 @@ def train_gnn(config, kwargs=None):
 
     device, data, train_triples, valid_triples, valid_neg_triples, test_triples, test_neg_triples  = device_and_data_loading(kwargs, return_test=True)
 
-    tdata = process_graph(data)
+    tdata = process_graph(data, heteroA=kwargs.heteroA)
 
+
+
+    rel2int = {k:v[0] for k,v in data.edge_reltype.items()}
+    target_relint = rel2int[kwargs.target_relation]
+    target_relation = kwargs.target_relation
+    if type(target_relint) is not int: target_relint = target_relint.item()
+    head_target, _ , tail_target = kwargs.target_relation
+    
+    print() 
+    print('---------------------------------')
+    print('target relation: ', kwargs.target_relation)
+    print('target relation int: ', target_relint)
+    print('---------------------------------')
+    print()
 
     edge_index_dict = {key: tdata[key]['edge_index'] for key in tdata.metadata()[1]}
     num_node_dict = {key: tdata[key].num_nodes for key in tdata.metadata()[0]}
 
-    train_dataset = TriplesDatasetGNN(train_triples, filter_to_relation=[5], edge_index_dict=edge_index_dict, channels=1, num_node_dict=num_node_dict)
-    valid_dataset = TriplesDatasetGNN(valid_triples, filter_to_relation=[5], edge_index_dict=edge_index_dict, channels=1, num_node_dict=num_node_dict)
+    train_dataset = TriplesDatasetGNN(train_triples, filter_to_relation=[target_relint], edge_index_dict=edge_index_dict, channels=1, target_relation=target_relation, num_node_dict=num_node_dict)
+    valid_dataset = TriplesDatasetGNN(valid_triples, filter_to_relation=[target_relint], edge_index_dict=edge_index_dict, channels=1, target_relation=target_relation, num_node_dict=num_node_dict)
 
     train_loader = pyg.loader.DataLoader(train_dataset, batch_size=config['batch_size'], shuffle=True, 
                                          num_workers=config['num_workers'], persistent_workers=False)
@@ -174,12 +184,11 @@ def train_gnn(config, kwargs=None):
                 heads=config['heads'], 
                 bias=config['bias'], 
                 edge_dim=config['edge_dim'], 
-                norm_mode=config['norm_mode'], 
-                norm_affine=False,
                 nonlin=nonlin,
                 checkpoint=config['checkpoint'], 
                 conv=config['conv'],
-                residual=config['residual']
+                residual=config['residual'],
+                norm=config['norm'],
             ).to(device)
     
     if kwargs.compile: 
@@ -187,13 +196,13 @@ def train_gnn(config, kwargs=None):
         model = torch.compile(model)
     
     optim = torch.optim.Adam(model.parameters(), lr=config['lr'], weight_decay=config['wd'])
-    prot_idx = tdata.metadata()[0].index('protein')
+    prot_idx = tdata.metadata()[0].index(tail_target)
     crit = torch.nn.BCELoss()
 
     stopper = EarlyStopper(patience=kwargs.patience, min_delta=0.)
 
-    best_model = None
-    best_topat10 = -np.inf 
+    best_model_state_dict = None
+    best_metric = -np.inf 
 
     metrics = {'mrr':[], 'top@10':[], 'top@100':[], 'auroc':[]}
 
@@ -209,6 +218,7 @@ def train_gnn(config, kwargs=None):
             edge_index = batch.edge_index.to(device)
             x = batch.x.to(device)
             y = batch.y.to(device)
+            
 
             out = model(x, edge_index, edge_type)
 
@@ -225,21 +235,18 @@ def train_gnn(config, kwargs=None):
             auroc = roc_auc_score(py.detach().cpu().numpy(), pout.detach().cpu().numpy())
             print(f'train batch [{i}/{len(train_loader)}], loss: {loss.item():.2f}, auroc: {auroc:.2f}', end='\r')
 
-        mrr, topat10, topat100, auroc = eval(val_loader, model, prot_idx, device=device, deterministic=True)
-        metrics['mrr'].append(mrr)
-        metrics['top@10'].append(topat10)
-        metrics['top@100'].append(topat100)
-        metrics['auroc'].append(auroc)
-
-        toc = time.time() 
-        print(f'-----------------> epoch: {epoch}, train loss: {np.mean(losses):.3f}, val auroc: {auroc:.3f}, val mrr: {mrr:.3f}, top@10: {topat10:.3f}, top@100: {topat100:.3f} [elapsed: {(toc-tic)/60:.1f}m]')
-        
-        if topat10 > best_topat10:
-            best_topat10 = topat10
-            best_model = model
-
         if epoch % kwargs.log_every == 0: 
-            out_dict = {'best_model': best_model,
+            mrr, topat10, topat100, auroc = eval(data, tdata, target_relation, target_relint, train_triples, valid_triples, test_triples, model, device=device, partition='valid')
+            metrics['mrr'].append(mrr)
+            metrics['top@10'].append(topat10)
+            metrics['top@100'].append(topat100)
+            metrics['auroc'].append(auroc)
+
+            if best_metric <= metrics[kwargs.target_metric][-1]:
+                best_metric = metrics[kwargs.target_metric][-1]
+                best_model_state_dict = copy.deepcopy(model.state_dict())
+
+            out_dict = {'best_state_dict': best_model_state_dict,
                         'args': kwargs,
                         'metrics': metrics,
                         'epoch': epoch, 
@@ -251,11 +258,23 @@ def train_gnn(config, kwargs=None):
             
             torch.save(out_dict, f'{kwargs.out}/results.pt')
 
-        if stopper.step(-topat10): 
-            print('early stopping at epoch: ', epoch)
-            break
+            if stopper.step(-metrics[kwargs.target_metric][-1]): 
+                print('early stopping at epoch: ', epoch)
+                break
 
-    df = predict_all(data, tdata, train_triples, valid_triples, test_triples, best_model, device)
+            toc = time.time() 
+            print(f'-----------------> epoch: {epoch}, train loss: {np.mean(losses):.3f}, val auroc: {auroc:.3f}, val mrr: {mrr:.3f}, top@10: {topat10:.3f}, top@100: {topat100:.3f} [elapsed: {(toc-tic)/60:.1f}m]')
+    
+
+    # load best model 
+    best_model = model 
+    best_model.load_state_dict(best_model_state_dict)
+    best_model.eval() 
+    torch.save(best_model, f'{kwargs.out}/best_model.pt')
+
+    # make predictions and evaluations 
+
+    df = predict_all(data, tdata, target_relation, target_relint, train_triples, valid_triples, test_triples, best_model, device)
     df.to_csv(f'{kwargs.out}/predictions.csv', index=False)
 
     #val metrics 
@@ -304,7 +323,4 @@ def train_gnn(config, kwargs=None):
         f.write(f'{uid}\n')
 
 
-
-
-
-    
+    return uid, val_metrics, test_metrics

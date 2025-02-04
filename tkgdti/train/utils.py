@@ -75,6 +75,24 @@ def device_and_data_loading(kwargs, return_test=False):
 
     else: 
         return device, data, train_triples, valid_triples, valid_neg_triples
+    
+def get_optim(optim): 
+
+    if optim == 'adam': 
+        return torch.optim.Adam 
+    elif optim == 'adan': 
+        try: 
+            from adan import Adan
+        except: 
+            raise ImportError('adan not installed. Please install adan (see: https://github.com/sail-sg/Adan)')
+        return Adan
+    elif optim == 'sgd': 
+        return torch.optim.SGD 
+    elif optim == 'rmsprop': 
+        return torch.optim.RMSprop
+    else:
+        raise ValueError(f'unrecognized optim argument: {optim}')
+    
 
 def training_inits(kwargs, config, model): 
 
@@ -89,6 +107,12 @@ def training_inits(kwargs, config, model):
     
     if config['optim'] == 'adam': 
         optim = torch.optim.Adam
+    elif config['optim'] == 'adan': 
+        try: 
+            from adan import Adan
+        except: 
+            raise ImportError('adan not installed. Please install adan (see: https://github.com/sail-sg/Adan)')
+        optim = Adan
     elif config['optim'] == 'adagrad': 
         optim = torch.optim.Adagrad
     elif config['optim'] == 'sgd': 

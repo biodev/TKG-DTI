@@ -60,6 +60,9 @@ def make_data(args):
     data = pyg.data.HeteroData()
 
     data.ordered_relations = []
+    edge_reltype = {}
+    node_name_dict = {}
+    num_nodes_dict = {}
     for i, (mat_path,edgetype) in enumerate(zip(['mat_drug_disease.txt',
                                                 'mat_protein_protein.txt',
                                                 #'mat_protein_drug.txt',   #NOTE: equivalent to transposed `mat_drug_protein.txt`
@@ -82,14 +85,19 @@ def make_data(args):
         edge_index, entityA, entityB, entityA_name, entityB_name = load_mat(args.root + '/raw/' +  mat_path)
 
         data.ordered_relations.append((entityA_name, '->'.join([entityA_name,edgetype,entityB_name]), entityB_name))
+        
         data['edge_index_dict'][(entityA_name, '->'.join([entityA_name,edgetype,entityB_name]), entityB_name)] = edge_index 
-        data['edge_reltype'][(entityA_name, '->'.join([entityA_name,edgetype,entityB_name]), entityB_name)] = i*np.ones(edge_index.shape[1]) 
-        data['node_name_dict'][entityA_name] = entityA
-        data['node_name_dict'][entityB_name] = entityB
-        data['num_nodes_dict'][entityA_name] = len(entityA)
-        data['num_nodes_dict'][entityB_name] = len(entityB)
+        edge_reltype[(entityA_name, '->'.join([entityA_name,edgetype,entityB_name]), entityB_name)] = i*np.ones(edge_index.shape[1], dtype=int) 
+        node_name_dict[entityA_name] = entityA
+        node_name_dict[entityB_name] = entityB
+        num_nodes_dict[entityA_name] = len(entityA)
+        num_nodes_dict[entityB_name] = len(entityB)
 
         print(f'{",".join(data.ordered_relations[-1])} {(50-len("".join(data.ordered_relations[-1])))*"-"}> num edges: {edge_index.shape[1]} \t\t| num_nodes (A): {len(entityA)} \t\t| num_nodes (B): {len(entityB)}')
+
+    data.edge_reltype = edge_reltype
+    data.num_nodes_dict = num_nodes_dict
+    data.node_name_dict = node_name_dict
 
     return data
 
@@ -224,7 +232,6 @@ if __name__ == '__main__':
                 for key2 in triples: 
                     assert len(triples[key1]) == len(triples[key2]), f'length of {key1} is not same as length of {key2}'
 
-
         # save data/idxs 
         np.save(f'{args.root}/processed/FOLD_{i}/train_idxs.npy', train_index)
         np.save(f'{args.root}/processed/FOLD_{i}/valid_idxs.npy', valid_index)
@@ -236,30 +243,6 @@ if __name__ == '__main__':
         torch.save(test, f'{args.root}/processed/FOLD_{i}/pos_test.pt') 
         
         torch.save(data_fold, f'{args.root}/processed/FOLD_{i}/Data.pt')
-        
-        '''
-        # negative sampling ... 
-        valid_neg_heads, valid_neg_tails, valid_neg_relations = negative_sampling(heads         = edge_index[0, valid_index], 
-                                                                                  tails         = edge_index[1, valid_index], 
-                                                                                    edge_index   = edge_index, 
-                                                                                    size         = (data['num_nodes_dict'][head_type], data['num_nodes_dict'][tail_type]), 
-                                                                                    relint       = target_relint, 
-                                                                                    n            = args.n_neg_samples)
-        
-        test_neg_heads, test_neg_tails, test_neg_relations = negative_sampling(heads         = edge_index[0, test_index], 
-                                                                                tails         = edge_index[1, test_index],  
-                                                                                edge_index   = edge_index, 
-                                                                                size         = (data['num_nodes_dict'][head_type], data['num_nodes_dict'][tail_type]),  
-                                                                                relint       = target_relint, 
-                                                                                n            = args.n_neg_samples)
-        
-        neg_valid = {'head': valid_neg_heads,
-                     'tail': valid_neg_tails, 
-                     'relation' : valid_neg_relations}
-        
-        neg_test = {'head': test_neg_heads,
-                     'tail': test_neg_tails, 
-                     'relation' : test_neg_relations}'''
         
         neg_valid = {'head': None,
                      'tail': None, 

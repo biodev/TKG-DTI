@@ -34,6 +34,16 @@ We currently have methods to download the OGB-biokg [dataset](https://ogb.stanfo
 (tkgdti) $ python train_complex2.py --data /path/to/data/ --out /path/to/output 
 ```
 
+## Results 
+
+FOLD-0 HeteroA 
+GNN best performance: 
+MRR      Top1      Top3     Top10   avg_AUC
+0.340086  0.205928  0.410296  0.611544  0.930691
+
+Complex2 best performance 
+MRR      Top1      Top3     Top10   avg_AUC
+0.329474  0.218409  0.391576  0.542902  0.862168
 
 --- 
 

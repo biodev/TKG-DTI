@@ -29,7 +29,13 @@ def get_args():
     parser.add_argument("--log_every", default=5, type=int, help="how often to log validation performance during training")
     parser.add_argument("--target_relations", default=None, nargs='*', type=int, help="target relations to use for loss scaling")
     parser.add_argument("--patience", default=3, type=int, help="early stopping patience; log_every*patience epochs without improvement")
-    return parser.parse_args()
+    parser.add_argument("--use_cpu", action='store_true', default=False, help="use cpu instead of gpu")
+    parser.add_argument("--target_relation", default='drug,targets,gene', type=str, help="tuple key of target relation")
+    parser.add_argument("--target_metric", default='mrr', type=str, help="metric to use for early stopping [hits@10, mrr, auroc]")
+    
+    args = parser.parse_args()
+    args.target_relation = tuple(args.target_relation.split(','))
+    return args
 
 
 if __name__ == '__main__': 

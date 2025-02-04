@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.metrics import roc_auc_score, average_precision_score, brier_score_loss
 from scipy.stats import rankdata
 
-def evaluate(df, ece_bins=10, partition='test'):
+def evaluate(df, ece_bins=10, partition='test', verbose=True):
     """
     Evaluate model performance metrics on the given dataframe.
 
@@ -19,12 +19,12 @@ def evaluate(df, ece_bins=10, partition='test'):
     brier_scores = []
 
     # Unique drugs in the dataframe
-    unique_drugs = df['drug_name'].unique()
+    unique_drugs = df['drug'].unique()
 
     for i,drug in enumerate(unique_drugs):
-        print(f'evaluating {partition} set, progress: {i}/{len(unique_drugs)}', end='\r')
+        if verbose: print(f'evaluating {partition} set, progress: {i}/{len(unique_drugs)}', end='\r')
         # Filter dataframe for the current drug and relevant partitions
-        tmp = df[(df['drug_name'] == drug) & (df[partition] | df['negatives'])]
+        tmp = df[(df['drug'] == drug) & (df[partition] | df['negatives'])]
 
         # Skip if there are no positive test samples
         if tmp[partition].astype(float).sum() < 1:
@@ -40,13 +40,12 @@ def evaluate(df, ece_bins=10, partition='test'):
         # Calculate Brier score
         brier_scores.append(brier_score_loss(y_true, y_prob))
 
-        # Calculate ranks using scipy's rankdata function
-        # Higher probabilities get lower ranks (rank 1 is the highest probability)
-        tmp_ranks = rankdata(-y_prob, method='min')
-
-        # Extract ranks of positive samples
-        pos_indices = np.where(y_true == 1)[0]
-        ranks.extend(tmp_ranks[pos_indices])
+        # Calculate rank of the each positive sample; only compare to negatives not to other positives
+        # probably a more clever way to do this...
+        for i,row in tmp[lambda x: x[partition]].iterrows():
+            neg_scores = tmp[lambda x: x.negatives].score
+            rank = (neg_scores >= row.score).sum() + 1
+            ranks.append(rank)
 
     ranks = np.array(ranks)
     metrics = {
