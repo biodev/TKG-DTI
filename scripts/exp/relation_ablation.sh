@@ -14,9 +14,10 @@ LOGDIR=$OUT/logs/
 DATA=$ROOT/processed/
 TARGET_RELATION="drug,targets,gene"
 
+N_FULL=5
 N=1
 FOLD=0
-N_RELATIONS=2  # 49 for testing use 2 
+N_RELATIONS=49  # 49 for testing use 2 
 
 ## complex args 
 
@@ -52,6 +53,64 @@ PATIENCE2=10
 ##############################################################
 ##############################################################
 ##############################################################
+
+
+for ((i=0; i<N_FULL; i++)); do
+    
+    sbatch <<EOF
+#!/bin/zsh
+#SBATCH --job-name=ablationFULL
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=16
+#SBATCH --gres=gpu:1
+#SBATCH --time=04:00:00
+#SBATCH --mem=24G
+#SBATCH --partition=gpu
+#SBATCH --output=$LOGDIR/log.%j.out
+#SBATCH --error=$LOGDIR/log.%j.err
+
+source ~/.zshrc
+conda activate tkgdti
+
+python ../train_gnn.py --data $DATA/FOLD_$i/ \
+    --out $OUT/GNN/FOLD_$i/ \
+    --wd $WD2 \
+    --channels $CHANNELS2 \
+    --layers $LAYERS2 \
+    --batch_size $BATCH_SIZE2 \
+    --n_epochs $N_EPOCHS2 \
+    --num_workers $NUM_WORKERS2 \
+    --lr $LR2 \
+    --dropout $DROPOUT2 \
+    --log_every $LOG_EVERY2 \
+    --patience $PATIENCE2 \
+    --nonlin $NONLIN2 \
+    --heads $HEADS2 \
+    --edge_dim $EDGE_DIM2 \
+    --conv $CONV2 \
+    --residual
+
+python ../train_complex2.py --data $DATA/FOLD_$i/ \
+    --out $OUT/COMPLEX2/FOLD_$i/ \
+    --optim $OPTIM \
+    --wd $WD \
+    --channels $CHANNELS \
+    --batch_size $BATCH_SIZE \
+    --n_epochs $N_EPOCHS \
+    --num_workers $NUM_WORKERS \
+    --lr $LR \
+    --dropout $DROPOUT \
+    --log_every $LOG_EVERY \
+    --patience $PATIENCE \
+    --target_relation $TARGET_RELATION \
+    --target_metric $TARGET_METRIC
+
+EOF
+
+done
+
+
 
 echo ""
 echo ""
