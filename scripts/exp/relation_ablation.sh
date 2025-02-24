@@ -117,3 +117,4 @@ python ../train_complex2.py --data $DATA/FOLD_$i/ \
 EOF
 
 done
+done
