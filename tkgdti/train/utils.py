@@ -71,8 +71,30 @@ def device_and_data_loading(kwargs, return_test=False):
     if return_test: 
         test_triples = torch.load(f'{kwargs.data}/pos_test.pt')
         test_neg_triples = torch.load(f'{kwargs.data}/neg_test.pt')
-        return device, data, train_triples, valid_triples, valid_neg_triples, test_triples, test_neg_triples
 
+    # filter utilities 
+    if kwargs.remove_relation_idx is not None:
+
+        # filter triples 
+        mask = train_triples['relation'] != kwargs.remove_relation_idx
+        train_triples = {k:v[mask] for k,v in train_triples.items()}
+
+        # filter data edge index 
+        rel2int = {k:v[0] for k,v in data.edge_reltype.items()} 
+        int2rel = {v:k for k,v in rel2int.items()}
+
+        print() 
+        print('-----------------------------------------------------------------------------------')
+        print('WARNING: removing relation:', int2rel[kwargs.remove_relation_idx])
+        print('-----------------------------------------------------------------------------------')
+        print() 
+
+        rel = int2rel[kwargs.remove_relation_idx]
+        data.edge_index_dict[rel] = torch.tensor([], dtype=torch.long)
+
+    if return_test: 
+        return device, data, train_triples, valid_triples, valid_neg_triples, test_triples, test_neg_triples
+    
     else: 
         return device, data, train_triples, valid_triples, valid_neg_triples
     

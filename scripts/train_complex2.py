@@ -32,7 +32,8 @@ def get_args():
     parser.add_argument("--use_cpu", action='store_true', default=False, help="use cpu instead of gpu")
     parser.add_argument("--target_relation", default='drug,targets,gene', type=str, help="tuple key of target relation")
     parser.add_argument("--target_metric", default='mrr', type=str, help="metric to use for early stopping [hits@10, mrr, auroc]")
-    
+    parser.add_argument("--remove_relation_idx", default=None, type=int, help="index of relation to remove from knowledge graph")
+
     args = parser.parse_args()
     args.target_relation = tuple(args.target_relation.split(','))
     return args
@@ -51,6 +52,7 @@ if __name__ == '__main__':
               'batch_size': args.batch_size, 
               'n_epochs': args.n_epochs, 
               'lr_scheduler' : args.lr_scheduler, 
-              'dropout':args.dropout}
+              'dropout':args.dropout,
+              'remove_relation_idx':args.remove_relation_idx,}
     
     model = train_gekc(config, args)

@@ -9,7 +9,7 @@
 ## data args
 # Assumes that the data has been processed and is present at the ROOT folder. If not, see notebooks/tkg/ for data processing.
 ROOT=../../data/tkg/
-OUT=../../output/tkg/
+OUT=../../output/tkge/
 DATA=$ROOT/processed/
 TARGET_RELATION="drug,targets,gene"
 K=10
@@ -30,13 +30,13 @@ TARGET_METRIC=mrr
 
 ## GNN args 
 
-WD2=1e-7
+WD2=1e-8
 CHANNELS2=16
 LAYERS2=4
 BATCH_SIZE2=5
 N_EPOCHS2=100
-NUM_WORKERS2=20
-LR2=1e-3
+NUM_WORKERS2=10
+LR2=1e-2
 DROPOUT2=0
 LOG_EVERY2=1
 NONLIN2=elu
@@ -53,24 +53,24 @@ echo ""
 
 for ((i=0; i<K; i++)); 
 do 
-    #echo 'training GNN...'
-    #python ../train_gnn.py --data $DATA/FOLD_$i/ \
-    #--out $OUT/GNN/FOLD_$i/ \
-    #--wd $WD2 \
-    #--channels $CHANNELS2 \
-    #--layers $LAYERS2 \
-    #--batch_size $BATCH_SIZE2 \
-    #--n_epochs $N_EPOCHS2 \
-    #--num_workers $NUM_WORKERS2 \
-    #--lr $LR2 \
-    #--dropout $DROPOUT2 \
-    #--log_every $LOG_EVERY2 \
-    #--patience $PATIENCE2 \
-    #--nonlin $NONLIN2 \
-    #--heads $HEADS2 \
-    #--edge_dim $EDGE_DIM2 \
-    #--conv $CONV2 \
-    #--residual
+    echo 'training GNN...'
+    python ../train_gnn.py --data $DATA/FOLD_$i/ \
+    --out $OUT/GNN/FOLD_$i/ \
+    --wd $WD2 \
+    --channels $CHANNELS2 \
+    --layers $LAYERS2 \
+    --batch_size $BATCH_SIZE2 \
+    --n_epochs $N_EPOCHS2 \
+    --num_workers $NUM_WORKERS2 \
+    --lr $LR2 \
+    --dropout $DROPOUT2 \
+    --log_every $LOG_EVERY2 \
+    --patience $PATIENCE2 \
+    --nonlin $NONLIN2 \
+    --heads $HEADS2 \
+    --edge_dim $EDGE_DIM2 \
+    --conv $CONV2 \
+    --residual
 
     echo 'training complex2...'
     python ../train_complex2.py --data $DATA/FOLD_$i/ \

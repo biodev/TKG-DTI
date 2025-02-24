@@ -11,7 +11,8 @@ import torch_geometric as pyg
 class TriplesDatasetGNN(Dataset):
     """"""
 
-    def __init__(self, triples, edge_index_dict, channels, num_node_dict, target_relation, filter_to_relation=None):
+    def __init__(self, triples, edge_index_dict, channels, num_node_dict, target_relation, 
+                 filter_to_relation=None):
         """
 
         """
@@ -33,10 +34,11 @@ class TriplesDatasetGNN(Dataset):
         self.x_dict = {node:torch.zeros((num_nodes, self.channels), dtype=torch.float32) for node, num_nodes in self.num_node_dict.items()}
 
     def __len__(self):
+
         return len(self.pos_heads)
 
     def __getitem__(self, idx):
-        
+
         pos_head = self.pos_heads[idx].detach()
         pos_tail = self.pos_tails[idx].detach()
         pos_relation = self.pos_relations[idx].detach()

@@ -51,7 +51,8 @@ if __name__ == '__main__':
 
     os.makedirs(args.out, exist_ok=True)
 
-    config = {'lr': args.lr, 
+    config = {'model':'path-gnn',
+              'lr': args.lr, 
               'wd': args.wd, 
               'channels': args.channels, 
               'batch_size': args.batch_size, 
