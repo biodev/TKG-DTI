@@ -73,8 +73,8 @@ for ((i=0; i<N_FULL; i++)); do
 source ~/.zshrc
 conda activate tkgdti
 
-python ../train_gnn.py --data $DATA/FOLD_$i/ \
-    --out $OUT/GNN/FOLD_$i/ \
+python ../train_gnn.py --data $DATA/FOLD_$FOLD/ \
+    --out $OUT/GNN/FOLD_$FOLD/ \
     --wd $WD2 \
     --channels $CHANNELS2 \
     --layers $LAYERS2 \
@@ -91,8 +91,8 @@ python ../train_gnn.py --data $DATA/FOLD_$i/ \
     --conv $CONV2 \
     --residual
 
-python ../train_complex2.py --data $DATA/FOLD_$i/ \
-    --out $OUT/COMPLEX2/FOLD_$i/ \
+python ../train_complex2.py --data $DATA/FOLD_$FOLD/ \
+    --out $OUT/COMPLEX2/FOLD_$FOLD/ \
     --optim $OPTIM \
     --wd $WD \
     --channels $CHANNELS \
@@ -111,11 +111,8 @@ EOF
 done
 
 
-
 echo ""
 echo ""
-
-i=$FOLD
 
 # loop through idxs 
 for idx in $(seq 0 $N_RELATIONS); do
@@ -138,8 +135,8 @@ for idx in $(seq 0 $N_RELATIONS); do
 source ~/.zshrc
 conda activate tkgdti
 
-python ../train_gnn.py --data $DATA/FOLD_$i/ \
-    --out $OUT/GNN/FOLD_$i/ \
+python ../train_gnn.py --data $DATA/FOLD_$FOLD/ \
+    --out $OUT/GNN/FOLD_$FOLD/ \
     --wd $WD2 \
     --channels $CHANNELS2 \
     --layers $LAYERS2 \
@@ -157,8 +154,8 @@ python ../train_gnn.py --data $DATA/FOLD_$i/ \
     --remove_relation_idx $idx \
     --residual
 
-python ../train_complex2.py --data $DATA/FOLD_$i/ \
-    --out $OUT/COMPLEX2/FOLD_$i/ \
+python ../train_complex2.py --data $DATA/FOLD_$FOLD/ \
+    --out $OUT/COMPLEX2/FOLD_$FOLD/ \
     --optim $OPTIM \
     --wd $WD \
     --channels $CHANNELS \

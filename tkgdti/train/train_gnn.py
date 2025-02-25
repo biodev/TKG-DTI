@@ -135,8 +135,6 @@ def train_gnn(config, kwargs=None):
 
     tdata = process_graph(data, heteroA=kwargs.heteroA)
 
-
-
     rel2int = {k:v[0] for k,v in data.edge_reltype.items()}
     target_relint = rel2int[kwargs.target_relation]
     target_relation = kwargs.target_relation
