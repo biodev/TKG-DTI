@@ -15,7 +15,7 @@ DATA=$ROOT/processed/
 TARGET_RELATION="drug,targets,gene"
 
 N_FULL=5
-N=1e
+N=1
 FOLD=0
 N_RELATIONS=49  # 49 for testing use 2 
 
