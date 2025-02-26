@@ -45,7 +45,8 @@ if __name__ == '__main__':
     print(args)
     print() 
 
-    config = {'optim':args.optim,
+    config = {'model':'complex2',
+              'optim':args.optim,
               'lr': args.lr, 
               'wd': args.wd, 
               'channels': args.channels, 

@@ -19,6 +19,11 @@ N=1
 FOLD=0
 N_RELATIONS=49  # 49 for testing use 2 
 
+
+TIME=06:00:00
+MEM=24G
+CPUS=16
+
 ## complex args 
 
 OPTIM=adam
@@ -62,10 +67,10 @@ for ((i=0; i<N_FULL; i++)); do
 #SBATCH --job-name=ablationFULL
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=$CPUS
 #SBATCH --gres=gpu:1
-#SBATCH --time=05:00:00
-#SBATCH --mem=24G
+#SBATCH --time=$TIME
+#SBATCH --mem=$MEM
 #SBATCH --partition=gpu
 #SBATCH --output=$LOGDIR/log.%j.out
 #SBATCH --error=$LOGDIR/log.%j.err
@@ -124,10 +129,10 @@ for idx in $(seq 0 $N_RELATIONS); do
 #SBATCH --job-name=ablation$idx
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
-#SBATCH --cpus-per-task=16
+#SBATCH --cpus-per-task=$CPUS
 #SBATCH --gres=gpu:1
-#SBATCH --time=04:00:00
-#SBATCH --mem=24G
+#SBATCH --time=$TIME
+#SBATCH --mem=$MEM
 #SBATCH --partition=gpu
 #SBATCH --output=$LOGDIR/log.%j.out
 #SBATCH --error=$LOGDIR/log.%j.err
