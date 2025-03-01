@@ -45,6 +45,12 @@ Complex2 best performance
 MRR      Top1      Top3     Top10   avg_AUC
 0.329474  0.218409  0.391576  0.542902  0.862168
 
---- 
 
-See `/docs/` for additional details.  
+
+---
+# Future work / feature requests 
+---
+
+1. Consider using page rank to identify smaller knowledge subgraph relevant to drugs/targets. This can improve scalability of the method. 
+
+2. Consider adding a relation type from beat aml patients -> pathway using gene expression enrichment of pathways, see `/notebooks/tkg/10_beataml_patient_response_and_omics.ipynb` for more info. 
