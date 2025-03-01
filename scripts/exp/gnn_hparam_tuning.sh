@@ -7,14 +7,11 @@
 # configs
 
 ## data args
-# Assumes that the data has been processed and is present at the ROOT folder. If not, see notebooks/tkg/ for data processing.
-ROOT=../../data/tkg/processed/FOLD_0/
-OUT=../../output/hparam_tuning/tkg/gnn/
+DATA=/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/data/tkg/processed/FOLD_0/
+OUT=/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/output/hparam_tuning/tkg/gnn/
 LOGDIR=$OUT/logs/
-DATA=$ROOT/processed/
-TARGET_RELATION="drug,targets,gene"
 
-N=2 # compute budget (number of runs)
+N=1 # compute budget (number of runs)
 
 TIME=04:00:00
 MEM=24G
