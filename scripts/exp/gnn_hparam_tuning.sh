@@ -26,22 +26,15 @@ PATIENCE=10
 
 ## complex args 
 
-
 ##############################################################
 ##############################################################
 ##############################################################
-
-
-
-echo ""
-echo ""
 
 # loop through idxs 
-for idx in $(seq 0 $N_RELATIONS); do
-    for ((j=0; j<N; j++)); do
-        echo 'submitting job for relation ablation...idx='$idx', fold='$i', run='$j
+for ((j=0; j<N; j++)); do
+    echo 'submitting hparam tuning run...i=$j'
 
-        sbatch <<EOF
+    sbatch <<EOF
 #!/bin/zsh
 #SBATCH --job-name=gnn$idx
 #SBATCH --nodes=1
@@ -64,5 +57,4 @@ python ../gnn_hparam_run.py --data $DATA --out $OUT --n_epochs N_EPOCHS --num_wo
 
 EOF
 
-done
 done
