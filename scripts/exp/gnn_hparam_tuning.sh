@@ -47,7 +47,7 @@ for ((j=0; j<N; j++)); do
 source ~/.zshrc
 conda activate tkgdti
 
-python ../gnn_hparam_run.py --data $DATA --out $OUT --n_epochs N_EPOCHS --num_workers NUM_WORKERS --patience PATIENCE
+python ../gnn_hparam_run.py --data $DATA --out $OUT --n_epochs $N_EPOCHS --num_workers $NUM_WORKERS --patience $PATIENCE
 
 ###########################################################
 
