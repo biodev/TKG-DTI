@@ -11,7 +11,7 @@ DATA=/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/data/tkg/processed/FOLD_
 OUT=/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/output/hparam_tuning/tkg/gnn/
 LOGDIR=$OUT/logs/
 
-N=1 # compute budget (number of runs)
+N=50 # compute budget (number of runs)
 
 TIME=04:00:00
 MEM=24G
