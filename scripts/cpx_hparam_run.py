@@ -36,11 +36,11 @@ def get_args():
 def get_config(): 
     # randomly sample from search space 
 
-    _lr             = [1e-2, 5e-3, 1e-3]
+    _lr             = [1e-2, 1e-3, 1e-4]
     _wd             = [0, 1e-8, 1e-7, 1e-6]
-    _channels       = [256, 512, 1024]
+    _channels       = [1024]
     _batch_size     = [5000, 10000, 25000]
-    _dropout        = [0., 0.1]
+    _dropout        = [0.]
 
     config = {'lr'                      : float( np.random.choice(_lr) ),
                 'wd'                    : float( np.random.choice(_wd) ),
@@ -61,6 +61,7 @@ if __name__ == '__main__':
         args = get_args()
         config = get_config()
 
+        # update args with config 
         args.batch_size = config['batch_size']
 
         os.makedirs(args.out, exist_ok=True)
