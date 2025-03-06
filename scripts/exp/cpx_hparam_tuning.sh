@@ -8,10 +8,10 @@
 
 ## data args
 DATA=/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/data/tkg/processed/FOLD_0/
-OUT=/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/output/hparam_tuning/tkg/FOLD_0/gnn/
+OUT=/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/output/hparam_tuning/tkg/FOLD_0/complex2/
 LOGDIR=$OUT/logs/
 
-N=50 # compute budget (number of runs)
+N=1 # compute budget (number of runs)
 
 TIME=04:00:00
 MEM=24G
@@ -33,7 +33,7 @@ for ((jj=0; jj<N; jj++)); do
 
     sbatch <<EOF
 #!/bin/zsh
-#SBATCH --job-name=gnn$jj
+#SBATCH --job-name=cpx$jj
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 #SBATCH --cpus-per-task=$CPUS
@@ -46,7 +46,7 @@ for ((jj=0; jj<N; jj++)); do
 
 source ~/.zshrc
 conda activate tkgdti
-python ../gnn_hparam_run.py --data $DATA --out $OUT --n_epochs $N_EPOCHS --num_workers $NUM_WORKERS --patience $PATIENCE
+python ../cpx_hparam_run.py --data $DATA --out $OUT --n_epochs $N_EPOCHS --num_workers $NUM_WORKERS --patience $PATIENCE
 
 ###########################################################
 EOF

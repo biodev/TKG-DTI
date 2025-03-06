@@ -30,18 +30,23 @@ TARGET_METRIC=mrr
 
 ## GNN args 
 
-WD2=1e-8
-CHANNELS2=16
+# hparam results: 
+
+#lr	    wd	            channels	layers	batch_size	heads	norm	conv	nonlin	dropout	edge_dim	residual	val_MRR	val_avg_AUC
+#0.001	1.000000e-07	12	        4	    5	        2	    layer	gat	    mish	0.1	    6	        True	    0.174691	0.984053
+
+WD2=1e-7
+CHANNELS2=12
 LAYERS2=4
 BATCH_SIZE2=5
 N_EPOCHS2=100
 NUM_WORKERS2=10
-LR2=1e-2
-DROPOUT2=0
+LR2=1e-3
+DROPOUT2=0.1
 LOG_EVERY2=1
-NONLIN2=elu
+NONLIN2=mish
 HEADS2=2
-EDGE_DIM2=4
+EDGE_DIM2=6
 CONV2=gat
 PATIENCE2=15
 ##############################################################

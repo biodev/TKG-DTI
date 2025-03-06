@@ -270,6 +270,8 @@ def train_gekc(config, kwargs=None):
     with open(f'{kwargs.out}/completed.txt', 'w') as f: 
         f.write(f'{uid}\n')
 
+    return uid, val_metrics, test_metrics
+
 
 
 
