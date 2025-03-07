@@ -13,7 +13,7 @@ OUT=../../output/tkge/
 DATA=$ROOT/processed/
 LOGDIR=$OUT/logs/
 TARGET_RELATION="drug,targets,gene"
-K=1  # number of folds
+K=10  # number of folds
 
 # node request params 
 TIME=05:00:00
