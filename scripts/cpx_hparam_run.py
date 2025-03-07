@@ -47,11 +47,11 @@ def get_config():
                 'channels'              : int( np.random.choice(_channels) ),
                 'batch_size'            : int( np.random.choice(_batch_size) ),
                 'dropout'               : float( np.random.choice(_dropout) ),
-                'checkpoint'            :False, 
-                'bias'                  :False,
-                'optim'                 :'adam',
-                'lr_scheduler'          :None,
-                'remove_relation_idx'   :None}
+                'checkpoint'            : False, 
+                'bias'                  : False,
+                'optim'                 : 'adam',
+                'lr_scheduler'          : None,
+                'remove_relation_idx'   : None}
     
     return config
         

@@ -11,21 +11,32 @@
 ROOT=../../data/tkg/
 OUT=../../output/tkge/
 DATA=$ROOT/processed/
+LOGDIR=$OUT/logs/
 TARGET_RELATION="drug,targets,gene"
-K=10
+K=1  # number of folds
+
+# node request params 
+TIME=05:00:00
+MEM=24G
+CPUS=16
+
 
 ## complex args 
 
+# hparam results 
+#lr	    wd	            channels	batch_size	dropout	    val_MRR	    val_avg_AUC	
+#0.010	1.000000e-06	1024	    10000	    0.0	        0.193079	0.960321	
+
 OPTIM=adam
 WD=1e-6
-CHANNELS=512
+CHANNELS=1024
 BATCH_SIZE=5000
 N_EPOCHS=100
 NUM_WORKERS=10
-LR=1e-3
+LR=1e-2
 DROPOUT=0.
 LOG_EVERY=1
-PATIENCE=100
+PATIENCE=10
 TARGET_METRIC=mrr
 
 ## GNN args 
@@ -56,10 +67,27 @@ PATIENCE2=15
 echo ""
 echo ""
 
+# request a separate node for every fold and model 
 for ((i=0; i<K; i++)); 
 do 
-    echo 'training GNN...'
-    python ../train_gnn.py --data $DATA/FOLD_$i/ \
+
+sbatch <<EOF
+#!/bin/zsh
+#SBATCH --job-name=gnn$i
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=$CPUS
+#SBATCH --gres=gpu:1
+#SBATCH --time=$TIME
+#SBATCH --mem=$MEM
+#SBATCH --partition=gpu
+#SBATCH --output=$LOGDIR/log.%j.out
+#SBATCH --error=$LOGDIR/log.%j.err
+
+source ~/.zshrc
+conda activate tkgdti
+
+python ../train_gnn.py --data $DATA/FOLD_$i/ \
     --out $OUT/GNN/FOLD_$i/ \
     --wd $WD2 \
     --channels $CHANNELS2 \
@@ -77,8 +105,24 @@ do
     --conv $CONV2 \
     --residual
 
-    echo 'training complex2...'
-    python ../train_complex2.py --data $DATA/FOLD_$i/ \
+EOF
+
+sbatch <<EOF
+#!/bin/zsh
+#SBATCH --job-name=cpx$i
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+#SBATCH --cpus-per-task=$CPUS
+#SBATCH --gres=gpu:1
+#SBATCH --time=$TIME
+#SBATCH --mem=$MEM
+#SBATCH --partition=gpu
+#SBATCH --output=$LOGDIR/log.%j.out
+#SBATCH --error=$LOGDIR/log.%j.err
+
+source ~/.zshrc
+conda activate tkgdti
+python ../train_complex2.py --data $DATA/FOLD_$i/ \
     --out $OUT/COMPLEX2/FOLD_$i/ \
     --optim $OPTIM \
     --wd $WD \
@@ -93,5 +137,6 @@ do
     --target_relation $TARGET_RELATION \
     --target_metric $TARGET_METRIC
 
+EOF
 
 done
