@@ -8,8 +8,8 @@
 
 ## data args
 # Assumes that the data has been processed and is present at the ROOT folder. If not, see notebooks/tkg/ for data processing.
-ROOT=../../data/tkg/
-OUT=../../output/tkge/
+ROOT=../../data/tkge_no_patient/
+OUT=../../output/tkge_no_patient/
 DATA=$ROOT/processed/
 LOGDIR=$OUT/logs/
 TARGET_RELATION="drug,targets,gene"
