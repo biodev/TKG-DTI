@@ -9,22 +9,6 @@ import time
 import sys 
 
 
-def make_relgroups(rel2type): 
-    # we want to get the rel types (ints) groups that all connect the same head-tail types
-    # thought: this allows us to learn prob distribution across multiple rel types which may contain useful information
-    relgroups = {}
-    for relint, reltup in rel2type.items(): 
-        h,r,t = reltup 
-        key = h + '->' + t 
-        if key in relgroups: 
-            relgroups[key].append(relint)
-        else: 
-            relgroups[key] = [relint]
-
-    relgroups = {k:torch.tensor(v, dtype=torch.long) for k,v in relgroups.items()}
-
-    return relgroups
-
 class ComplEx2(torch.nn.Module): 
 
     def __init__(self, data, hidden_channels=512, scale_grad_by_freq=False, dtype=torch.float32, dropout=0.): 
@@ -172,6 +156,28 @@ def triple_dot(x,y,z):
 
 
 '''
+
+
+
+
+def make_relgroups(rel2type): 
+    # we want to get the rel types (ints) groups that all connect the same head-tail types
+    # thought: this allows us to learn prob distribution across multiple rel types which may contain useful information
+    relgroups = {}
+    for relint, reltup in rel2type.items(): 
+        h,r,t = reltup 
+        key = h + '->' + t 
+        if key in relgroups: 
+            relgroups[key].append(relint)
+        else: 
+            relgroups[key] = [relint]
+
+    relgroups = {k:torch.tensor(v, dtype=torch.long) for k,v in relgroups.items()}
+
+    return relgroups
+
+
+    
 
     def forward(self, head, relation, tail):
         ''''''
