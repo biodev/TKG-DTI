@@ -14,7 +14,6 @@ class TriplesDatasetGNN(Dataset):
     def __init__(self, triples, edge_index_dict, channels, num_node_dict, target_relation, 
                  filter_to_relation=None):
         """
-
         """
         self.channels = channels
         self.num_node_dict = num_node_dict

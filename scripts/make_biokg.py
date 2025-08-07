@@ -69,8 +69,8 @@ if __name__ == '__main__':
     # data = add_edges(data, test_triples, rel2type)
 
     neg_valid = {'head': None,
-                     'tail': None, 
-                     'relation' : None}
+                'tail': None, 
+                'relation' : None}
         
     neg_test = {'head':None,
                     'tail':None, 

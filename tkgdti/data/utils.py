@@ -9,11 +9,11 @@ import requests
 import csv
 import pandas as pd 
 
-def get_protein_sequence_uniprot(gene_symbol):
+def get_protein_sequence_uniprot(gene_symbol, email=''):
     """Retrieve the canonical protein sequence for a given gene symbol from UniProt."""
 
     # Set your email (NCBI requires it for identification)
-    Entrez.email = "evansna@ohsu.edu"
+    Entrez.email = email
     try:
         # Construct the query with quotes around the gene symbol, and include only reviewed entries
         query = f'gene_exact:"{gene_symbol}" AND organism_id:9606 AND reviewed:true'

@@ -1,5 +1,5 @@
 '''
-Heterogenous version of (my original implementation; distinct from paper implementation)
+Heterogenous version of (distinct from paper implementation)
 How to Turn Your Knowledge Graph Embeddings into Generative Models (https://arxiv.org/pdf/2305.15944) 
 '''
 import numpy as np
