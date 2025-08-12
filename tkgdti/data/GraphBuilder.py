@@ -38,9 +38,13 @@ class GraphBuilder:
         nodetypes = np.unique(self.relations.src_type.tolist() + self.relations.dst_type.tolist())
         if self.verbose: print(f'Node types: {nodetypes}')
 
+        # drop na 
+        self.relations = self.relations.dropna(subset=['src', 'dst', 'src_type', 'dst_type', 'relation'])
+
         self.node2idx = {}
         self.node_names_dict = {}
         for i,ntype in enumerate(nodetypes):
+
             src_nodes = self.relations[self.relations.src_type == ntype].src.tolist()
             dst_nodes = self.relations[self.relations.dst_type == ntype].dst.tolist()
             all_nodes = np.unique(src_nodes + dst_nodes)
