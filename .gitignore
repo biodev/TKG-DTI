@@ -3,6 +3,7 @@
 /deprecated/training_curves/
 **/__pycache__
 *.egg-info
-/extdata/
 **/model.pt 
 **/predictions.csv
+*.snakemake
+**/pypath_log/

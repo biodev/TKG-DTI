@@ -21,10 +21,12 @@ dependencies:
   - conda-forge::statsmodels
   - conda-forge::pysftp
   - conda-forge::pubchempy
+  - snakemake
   - pip
   - pip:
       - ipykernel
       - umap-learn
+      - snakemake
       - biopython
       - omnipath
       - pypath-omnipath

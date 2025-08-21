@@ -20,6 +20,14 @@ def get_args():
     parser.add_argument("--seed", type=int, default=0, help="Seed")
     parser.add_argument("--train_split", type=str, default="train[:90%]", help="HF split string for training")
     parser.add_argument("--test_split", type=str, default="train[90%:]", help="HF split string for test")
+    parser.add_argument("--prot_model_name", type=str, default="Rostlab/prot_bert", help="Model name")  # this should be matched to 05
+    parser.add_argument("--prot_repr", type=str, default="cls", help="Representation")
+    parser.add_argument("--prot_batch_size", type=int, default=128, help="Batch size")
+    parser.add_argument("--prot_max_len", type=int, default=2048, help="Max length for protein")
+    parser.add_argument("--smiles_model_name", type=str, default="yzimmermann/ChemBERTa-77M-MLM-safetensors", help="Model name") # this should be matched to 02
+    parser.add_argument("--smiles_repr", type=str, default="cls", help="Representation")
+    parser.add_argument("--smiles_batch_size", type=int, default=128, help="Batch size")
+    parser.add_argument("--smiles_max_len", type=int, default=2048, help="Max length for SMILES")
     return parser.parse_args()
 
 
@@ -48,6 +56,41 @@ def main():
     test = load_dataset("jglaser/binding_affinity", split=args.test_split)
 
     train_df = train.to_pandas()
+
+    # ------------------------------------------------------------------------------------------------
+    print() 
+    print('-' * 100)
+    print('removing TKG DTIS from jglaser training set to prevent data leak')
+
+    # remove any of the known DTIS from `targetome_drug_targets_gene_fwd.csv` from the training set to prevent data leak
+    drug_info = pd.read_csv(f'{args.out}/meta/targetome__drug_targets_gene.csv')
+    gene2aa = pd.read_csv(f'{args.out}/meta/gene2aa.csv')
+    drug_info = drug_info.merge(gene2aa, left_on='gene_symbol', right_on='gene_name', how='inner')[['smiles', 'sequence']]
+    drug_info = drug_info.assign(kg_dti = True) 
+
+    train_df = train_df.merge(drug_info, left_on=['smiles_can', 'seq'], right_on=['smiles', 'sequence'], how='left')
+
+    jglaser_smiles = drug_info.smiles.unique()
+    jglaser_aas = drug_info.sequence.unique()
+
+    kg_smiles = drug_info.smiles.unique()
+    kg_aas = drug_info.sequence.unique()
+
+    overlap_smiles = set(jglaser_smiles).intersection(set(kg_smiles))
+    overlap_aas = set(jglaser_aas).intersection(set(kg_aas))
+    print(f'# of overlap smiles (jglaser + tkg) / tkg: {len(overlap_smiles)} / {len(kg_smiles)}')
+    print(f'# of overlap aas (jglaser + tkg) / tkg: {len(overlap_aas)} / {len(kg_aas)}')
+
+    n_kg_dtis = train_df.kg_dti.sum() 
+    print('# of TKG DTIS (will be removed from jglaser training set):', n_kg_dtis)
+
+    train_df = train_df[train_df.kg_dti.isna()] # remove KG DTIS
+    train_df = train_df.drop(columns=['kg_dti'])
+
+    print('-' * 100)
+    print()
+    # ------------------------------------------------------------------------------------------------
+
     test_df = test.to_pandas()
 
     # build vocabularies
@@ -62,12 +105,24 @@ def main():
     print(f"# unique sequences: {len(aas)}")
     print(f"# unique smiles: {len(smiles)}")
 
-    # embed
-    AA2E = AA2EMB()
-    z_prot = AA2E.embed(aas)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
 
-    S2E = SMILES2EMB()
-    z_drug = S2E.embed(smiles)
+    # embed
+    AA2E = AA2EMB(model_name        = args.prot_model_name, 
+                  repr              = args.prot_repr, 
+                  batch_size        = args.prot_batch_size, 
+                  max_len           = args.prot_max_len)
+                  
+    print(AA2E.tokenizer.get_vocab())
+    z_prot = AA2E.embed(aas, device=device)
+
+    S2E = SMILES2EMB(model_name         = args.smiles_model_name, 
+                     batch_size         = args.smiles_batch_size, 
+                     repr              = args.smiles_repr,
+                     max_len            = args.smiles_max_len)
+
+    print(S2E.tokenizer.get_vocab())
+    z_drug = S2E.embed(smiles, device=device)
 
     # save artifacts
     torch.save(z_prot, os.path.join(jg_dir, "z_prot.pt"))

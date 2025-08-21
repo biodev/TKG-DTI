@@ -33,6 +33,7 @@ def get_args():
     parser.add_argument("--target_relation", default='drug,targets,gene', type=str, help="tuple key of target relation")
     parser.add_argument("--target_metric", default='mrr', type=str, help="metric to use for early stopping [hits@10, mrr, auroc]")
     parser.add_argument("--remove_relation_idx", default=None, type=int, help="index of relation to remove from knowledge graph")
+    parser.add_argument("--eval_method", default='all', type=str, choices=['all', 'negatives'], help="evaluation method: 'all' or 'negatives'")
 
     args = parser.parse_args()
     args.target_relation = tuple(args.target_relation.split(','))

@@ -8,6 +8,7 @@ import os
 from tkgdti.data.utils import get_smiles_inchikey, get_protein_sequence_uniprot
 import argparse 
 import pubchempy as pcp
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 
 
@@ -74,10 +75,13 @@ def load_tg(args):
     tg = tg.rename({'targetome_min_assay': 'assay_value'}, axis=1)
 
     # convert gene_symbol to uniprot_id 
-    tg = tg.merge(symbol2uniprot(tg.gene_symbol.unique()), on='gene_symbol', how='left')
+    s2u = symbol2uniprot(tg.gene_symbol.unique())
+
+    tg = tg.merge(s2u, on='gene_symbol', how='left')
     tg = tg.drop_duplicates()
 
     return tg 
+
 
 def get_drug_props(drug_names): 
 
@@ -107,6 +111,67 @@ def get_drug_props(drug_names):
     drug_info.to_csv(f'{args.extdata}/tg_inchikeys.csv', index=False)
 
     return drug_info 
+
+def get_drug_props_mt(drug_names, max_workers: int = 12):
+    """Multithreaded retrieval of PubChem SMILES/InChIKey for a list of drug names.
+
+    This mirrors the behavior of `get_drug_props` but performs requests in parallel
+    for significantly faster wall-clock time on large drug sets.
+
+    Notes:
+    - Respects the same cache file at `{args.extdata}/tg_inchikeys.csv`.
+    - Uses the first PubChem result for each name, matching the original heuristic.
+    """
+
+    cache_path = f"{args.extdata}/tg_inchikeys.csv"
+    if os.path.exists(cache_path):
+        print('NOTE: using cached drug info [delete `extadata/tg_inchikeys.csv` if this is not desired]')
+        return pd.read_csv(cache_path)
+
+    def fetch_one(drug_name: str):
+        try:
+            df = pcp.get_properties(
+                properties=['smiles', 'inchikey'],
+                identifier=drug_name,
+                namespace='name',
+                as_dataframe=True,
+            )
+            if df is None or getattr(df, 'empty', True):
+                return None, drug_name
+            df = df.assign(inhibitor=drug_name).reset_index()
+            df = df.iloc[[0]]  # ensure 1:1 mapping by selecting first result
+            return df, None
+        except Exception:
+            return None, drug_name
+
+    unique_drugs = list(set(drug_names))
+    futures = []
+    results = []
+    failed = []
+
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        futures = {executor.submit(fetch_one, drug): drug for drug in unique_drugs}
+        for fut in tqdm(as_completed(futures), total=len(futures), desc=f'PubChem (mt, {max_workers} threads)'):
+            df, fail = fut.result()
+            if df is not None:
+                results.append(df)
+            elif fail is not None:
+                failed.append(fail)
+
+    if failed:
+        print('failed to retrieve smiles for: ', failed)
+
+    if len(results) == 0:
+        # Fall back to empty DataFrame with expected columns
+        out = pd.DataFrame(columns=['inhibitor', 'cid', 'smiles', 'inchikey'])
+        out.to_csv(cache_path, index=False)
+        return out
+
+    drug_info = pd.concat(results, axis=0)
+    # Normalize column names to match the original convention
+    drug_info = drug_info.drop_duplicates().rename(columns={'CID': 'cid', 'SMILES': 'smiles', 'InChIKey': 'inchikey'})
+    drug_info.to_csv(cache_path, index=False)
+    return drug_info
 
 def filter_dtis(dtis, args): 
 
@@ -158,11 +223,19 @@ if __name__ == "__main__":
 
     drug_info = filter_dtis(drug_info, args)
     drug_info = drug_info[['inhibitor', 'inchikey', 'gene_symbol', 'uniprot_id', 'file_source', 'smiles']].drop_duplicates()
+
+    # bug fix: was getting more unique inchikeys than unique drugs 
+    drug_info = drug_info.dropna(subset=['inchikey'])
+    drug_info = drug_info.dropna(subset=['smiles'])
+    drug_info = drug_info.dropna(subset=['gene_symbol'])
+    drug_info = drug_info.dropna(subset=['inhibitor']) # this fixed it I think 
+
     
     print('summary:')
     print('-'*100)
     print(f'number of unique drugs: {drug_info.inhibitor.nunique()}') # multiple names map to same smiles 
-    print(f'number of unique genes: {drug_info.gene_symbol.nunique()}')
+    print(f'number of unique gene symbols: {drug_info.gene_symbol.nunique()}')
+    print(f'number of unique uniprot ids: {drug_info.uniprot_id.nunique()}')
     print(f'number of unique inchikeys: {drug_info.inchikey.nunique()}')
     print(f'number of DTIs: {drug_info.shape[0]}')
     print(drug_info.groupby('file_source').count()[['inhibitor']].rename({'inhibitor': 'count'}, axis=1))

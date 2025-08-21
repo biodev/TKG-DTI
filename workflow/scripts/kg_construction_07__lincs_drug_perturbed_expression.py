@@ -40,12 +40,25 @@ if __name__ == '__main__':
     print(f'  siginfo rows: {siginfo.shape[0]}')
 
     print('loading compound metadata...')
-    drugspace = np.loadtxt(f'{args.out}/meta/drugspace.txt', dtype=str) if os.path.exists(f'{args.out}/meta/drugspace.txt') else None
+    # CRITICAL FIX: Always filter to original targetome drugs (89 drugs)
+    targetome_meta_path = f'{args.out}/meta/targetome__drug_targets_gene.csv'
+    if os.path.exists(targetome_meta_path):
+        targetome_drugs = pd.read_csv(targetome_meta_path)
+        valid_inchikeys = set(targetome_drugs['inchikey'].dropna())
+        print(f'Original targetome drugs: {len(valid_inchikeys)}')
+    else:
+        # Fallback to drugspace.txt if available
+        drugspace = np.loadtxt(f'{args.out}/meta/drugspace.txt', dtype=str) if os.path.exists(f'{args.out}/meta/drugspace.txt') else None
+        if drugspace is not None:
+            valid_inchikeys = set(drugspace)
+            print(f'Using drugspace.txt: {len(valid_inchikeys)} drugs')
+        else:
+            raise FileNotFoundError(f"Neither {targetome_meta_path} nor drugspace.txt found. Cannot filter LINCS compounds.")
+    
     druginfo = pd.read_csv(f'{args.data}/compoundinfo_beta.txt', sep='\t', low_memory=False)
-    if drugspace is not None:
-        before = druginfo.shape[0]
-        druginfo = druginfo[lambda x: x.inchi_key.isin(drugspace)]
-        print(f'  filtered compounds by drugspace: {before} -> {druginfo.shape[0]}')
+    before = druginfo.shape[0]
+    druginfo = druginfo[druginfo.inchi_key.isin(valid_inchikeys)]
+    print(f'  filtered LINCS compounds to targetome drugs: {before} -> {druginfo.shape[0]}')
     pertid_space = druginfo.pert_id.unique()
 
     print('filtering siginfo to 10uM/24h exemplar signatures in valid cell lines...')

@@ -16,7 +16,8 @@ def get_args():
 
 def load_ctd_genes_diseases(path):
     df = pd.read_csv(path, comment='#', header=None, low_memory=False)
-    df.columns = ['GeneSymbol', 'GeneID', 'DiseaseName', 'DiseaseID', 'OmimIDs', 'PubMedIDs']
+    # From file: GeneSymbol,GeneID,DiseaseName,DiseaseID,DirectEvidence,OmimIDs,PubMedIDs
+    df.columns = ['GeneSymbol', 'GeneID', 'DiseaseName', 'DiseaseID', 'DirectEvidence', 'OmimIDs', 'PubMedIDs']
     return df
 
 

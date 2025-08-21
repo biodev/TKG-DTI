@@ -49,10 +49,12 @@ if __name__ == '__main__':
     os.makedirs(f'{args.out}/meta', exist_ok=True)
 
     # load embeddings dict from previous step
-    embed_dict = torch.load(f'{args.out}/meta/aas_dict.pt')
+    embed_dict = torch.load(f'{args.out}/meta/aas_dict.pt', weights_only=False)
     aas = embed_dict['amino_acids']
     gene2aa = embed_dict['meta_df']
     z_prot = embed_dict['embeddings']
+
+    print(f'z_prot shape: {z_prot.shape}')
 
     # compute pairwise similarities (upper triangle)
     res = compute_upper_triangle_links(z_prot)
@@ -81,7 +83,7 @@ if __name__ == '__main__':
     print('-' * 100)
     print(f'# pairs above threshold (directed): {sim_relations.shape[0]}')
     print('example rows:')
-    print(sim_relations.head(3))
+    print(sim_relations.head(5)[['src', 'dst']])
     print('-' * 100)
 
     print(f'saved to: {args.out}')

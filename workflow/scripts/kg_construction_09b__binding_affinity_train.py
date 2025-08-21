@@ -3,6 +3,8 @@ import argparse
 import numpy as np
 import pandas as pd
 import torch
+import json
+from sklearn.metrics import mean_squared_error, mean_absolute_error
 
 from hnet.models.MLP import MLP
 from hnet.models.HyperNet import HyperNet
@@ -23,6 +25,14 @@ def get_args():
     parser.add_argument("--hidden_channels", type=int, default=256)
     parser.add_argument("--layers", type=int, default=3)
     parser.add_argument("--stochastic_channels", type=int, default=4)
+    parser.add_argument("--p_val", type=float, default=0.05)
+    parser.add_argument("--wd", type=float, default=0.0)
+    parser.add_argument("--norm", type=str, default="batch")
+    parser.add_argument("--nonlin", type=str, default="elu")
+    parser.add_argument("--dropout", type=float, default=0.0)
+    parser.add_argument("--learn_pz", type=bool, default=False)
+    parser.add_argument("--hnet_width", type=int, default=256)
+
     return parser.parse_args()
 
 
@@ -52,6 +62,11 @@ def main():
     z_drug = torch.load(os.path.join(jg_dir, "z_drug.pt"), weights_only=False)
     z_prot = torch.load(os.path.join(jg_dir, "z_prot.pt"), weights_only=False)
 
+    if type(z_drug) == np.ndarray:
+        z_drug = torch.from_numpy(z_drug).type(torch.float32)
+    if type(z_prot) == np.ndarray:
+        z_prot = torch.from_numpy(z_prot).type(torch.float32)
+
     # split
     train_df = affinity[lambda x: x.partition == "train"]
     drug_idx_train = torch.tensor(train_df.drug_idx.values, dtype=torch.long)
@@ -63,7 +78,7 @@ def main():
     prot_idx2 = torch.tensor(test_df.prot_idx.values, dtype=torch.long)
     y_test = torch.tensor(test_df.affinity.values, dtype=torch.float32)
 
-    n_val = max(1, int(len(y_test) * 0.05))
+    n_val = max(1, int(len(y_test) * args.p_val))
     val_idx = np.random.choice(len(y_test), n_val, replace=False)
     test_idx = np.setdiff1d(np.arange(len(y_test)), val_idx)
 
@@ -82,12 +97,31 @@ def main():
         "hidden_channels": args.hidden_channels,
         "out_channels": 1,
         "layers": args.layers,
+        "norm": args.norm, 
+        "nonlin": args.nonlin,
+        "dropout": args.dropout,
     }
-    hnet_kwargs = {"stochastic_channels": args.stochastic_channels, "width": args.hidden_channels}
+    hnet_kwargs = {"stochastic_channels": args.stochastic_channels, 
+                   "width": args.hnet_width,
+                   "learn_pz": args.learn_pz,
+                   }
 
     model = HyperNet(MLP(**mlp_kwargs), **hnet_kwargs).to(device)
-    optim = torch.optim.Adam(model.parameters(), lr=args.lr)
+    optim = torch.optim.AdamW(model.parameters(), lr=args.lr, weight_decay=args.wd)
     crit = EnergyDistanceLoss()
+
+    # -------------------------------------------------------------------------
+    print() 
+    print('-'*100)
+    print('pre-training summary: ')
+    print(f'\t- train size: {len(y_train)}')
+    print(f'\t- val size: {len(y_val)}')
+    print(f'\t- test size: {len(y_test)}')
+    print(f'\t- # mlp params: {sum(p.numel() for p in model.model.parameters())}')
+    print(f'\t- # total params: {sum(p.numel() for p in model.parameters())}')
+    print(f'\t- # input channels: {z_drug.shape[1] + z_prot.shape[1]}') 
+    print('-'*100)
+    print()
 
     def eval_val():
         splits = torch.split(torch.arange(y_val.size(0)), args.batch_size)
@@ -104,6 +138,43 @@ def main():
         ss_tot = ((y_val.numpy().ravel() - y_val.numpy().ravel().mean()) ** 2).sum() + 1e-12
         r2 = 1.0 - ss_res / ss_tot
         return r, r2
+
+    def eval_test():
+        """Evaluate model on test set and return comprehensive metrics"""
+        model.eval()
+        splits = torch.split(torch.arange(y_test.size(0)), args.batch_size)
+        yhats = []
+        for idx in splits:
+            with torch.no_grad():
+                xx = torch.cat([z_drug[drug_idx_test[idx]], z_prot[prot_idx_test[idx]]], dim=1).to(device)
+                yhats.append(model(xx, samples=args.nsamples).cpu())
+        yhat_test = torch.cat(yhats, dim=1)
+        yhat_mu = yhat_test.mean(dim=0).numpy().ravel()
+        y_true = y_test.numpy().ravel()
+        
+        # Calculate metrics
+        r = np.corrcoef(yhat_mu, y_true)[0, 1]
+        
+        # R²
+        ss_res = ((y_true - yhat_mu) ** 2).sum()
+        ss_tot = ((y_true - y_true.mean()) ** 2).sum() + 1e-12
+        r2 = 1.0 - ss_res / ss_tot
+        
+        # MSE and MAE
+        mse = mean_squared_error(y_true, yhat_mu)
+        mae = mean_absolute_error(y_true, yhat_mu)
+        
+        # RMSE
+        rmse = np.sqrt(mse)
+        
+        return {
+            'correlation': float(r),
+            'r2': float(r2),
+            'mse': float(mse),
+            'mae': float(mae),
+            'rmse': float(rmse),
+            'n_samples': len(y_true)
+        }
 
     best_r2 = -np.inf
     best_state = None
@@ -133,6 +204,56 @@ def main():
     out_model = os.path.join(jg_dir, "model.pt")
     torch.save(model, out_model)
     print(f"saved model -> {out_model}")
+
+    # Evaluate on test set
+    print()
+    print('-'*100)
+    print('FINAL TEST EVALUATION:')
+    print('-'*100)
+    
+    test_metrics = eval_test()
+    
+    # Print test metrics to console
+    print(f"Test Set Performance (n={test_metrics['n_samples']}):")
+    print(f"\t- Correlation (r): {test_metrics['correlation']:.4f}")
+    print(f"\t- R²: {test_metrics['r2']:.4f}")
+    print(f"\t- MSE: {test_metrics['mse']:.4f}")
+    print(f"\t- MAE: {test_metrics['mae']:.4f}")
+    print(f"\t- RMSE: {test_metrics['rmse']:.4f}")
+    
+    # Save metrics to disk
+    metrics_file = os.path.join(args.out, "binding_affinity_test_metrics.json")
+    
+    # Add training configuration to metrics
+    full_metrics = {
+        'test_metrics': test_metrics,
+        'training_config': {
+            'seed': args.seed,
+            'nsamples': args.nsamples,
+            'batch_size': args.batch_size,
+            'lr': args.lr,
+            'num_epochs': args.num_epochs,
+            'hidden_channels': args.hidden_channels,
+            'layers': args.layers,
+            'stochastic_channels': args.stochastic_channels,
+            'p_val': args.p_val,
+            'best_val_r2': float(best_r2)
+        },
+        'data_info': {
+            'train_size': len(y_train),
+            'val_size': len(y_val),
+            'test_size': len(y_test),
+            'input_channels': z_drug.shape[1] + z_prot.shape[1]
+        }
+    }
+    
+    with open(metrics_file, 'w') as f:
+        json.dump(full_metrics, f, indent=2)
+    
+    print(f"\nMetrics saved to: {metrics_file}")
+    print('-'*100)
+
+
 
 
 if __name__ == "__main__":

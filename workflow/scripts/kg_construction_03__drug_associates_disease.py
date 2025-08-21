@@ -93,12 +93,25 @@ if __name__ == '__main__':
             f"Required file not found: {targetome_meta_path}. Run kg_construction_01__drug_interacts_protein.py first."
         )
 
-    cache_overlap_path = f"{args.extdata}/meta/ctd_targetome_drug_overlap.csv"
+    cache_overlap_path = f"{args.extdata}/ctd_targetome_drug_overlap.csv"
     ctd_overlap = build_ctd_targetome_overlap(ctd, targetome_meta_path, cache_overlap_path)
     print(f"num matching drugs (targetome, ctd): {ctd_overlap.shape[0]}")
 
     # Join CTD rows to only those chemicals present in Targetome via InChIKey
     ctd = ctd.merge(ctd_overlap, left_on='ChemicalName', right_on='CTD_ChemicalName', how='inner')
+    
+    # CRITICAL FIX: Filter to only the original 89 targetome drugs
+    # Load the original targetome drug set to ensure we don't add extra drugs
+    targetome_drugs = pd.read_csv(targetome_meta_path)
+    valid_inchikeys = set(targetome_drugs['inchikey'].dropna())
+    
+    print(f"Original targetome drugs: {len(valid_inchikeys)}")
+    print(f"CTD drugs before filtering: {ctd['inchikey'].nunique()}")
+    
+    # Filter CTD data to only include the original targetome drugs
+    ctd = ctd[ctd['inchikey'].isin(valid_inchikeys)]
+    
+    print(f"CTD drugs after filtering: {ctd['inchikey'].nunique()}")
 
     chemdis_meta = ctd[['DiseaseName', 'DiseaseID', 'ChemicalName', 'inchikey']].drop_duplicates()
 

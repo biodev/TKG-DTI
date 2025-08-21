@@ -1,0 +1,255 @@
+###############################################################################
+# Hetero-A Snakemake pipeline for DTI knowledge graph processing
+# Author: Nathaniel J Evans (evansna@ohsu.edu)
+#
+# This Snakefile processes the DTINet HeteroA dataset and trains Complex2 and
+# GNN models for drug-target interaction prediction using K-fold cross-validation.
+#
+# Pipeline steps:
+# 1. preprocess_heteroa: Download and preprocess the HeteroA dataset
+# 2. train_complex2: Train Complex2 model on each K-fold  
+# 3. train_gnn: Train GNN model on each K-fold
+#
+# Config file: workflow/hetero-a/config.yaml
+###############################################################################
+
+import os
+
+configfile: "config.yaml"
+
+CFG = config
+
+# ---------------------------------------------------------------------------
+# Directories (all outputs will be saved under EXP_ROOT)
+# ---------------------------------------------------------------------------
+
+EXP_ID = CFG["experiment"]["id"]
+SEED = int(CFG["experiment"].get("seed", 0))
+DATA_ROOT = CFG["dirs"]["data_root"]
+OUT_ROOT = CFG["dirs"]["out_root"]
+SCRIPT_DIR = CFG["dirs"].get("script_dir", os.path.join("workflow", "scripts"))
+
+EXP_ROOT = os.path.join(OUT_ROOT, EXP_ID)
+OUT_DIR = os.path.join(EXP_ROOT, "output")
+LOG_DIR = os.path.join(EXP_ROOT, "logs")
+
+def step_flag(step: str):
+    return os.path.join(EXP_ROOT, f".{step}_complete")
+
+# ---------------------------------------------------------------------------
+# Default target: build entire pipeline
+# ---------------------------------------------------------------------------
+
+rule all:
+    input:
+        # Ensure HeteroA preprocessing is complete
+        step_flag("01"),
+        # Ensure Complex2 training on all folds is complete
+        expand(os.path.join(EXP_ROOT, ".02_FOLD_{fold}_complete"),
+               fold=range(CFG.get("step_01_heteroa", {}).get("k_folds", 5))),
+        # Ensure GNN training on all folds is complete
+        expand(os.path.join(EXP_ROOT, ".03_FOLD_{fold}_complete"),
+               fold=range(CFG.get("step_01_heteroa", {}).get("k_folds", 5)))
+
+# ---------------------------------------------------------------------------
+# Rule: initialize experiment directories
+# ---------------------------------------------------------------------------
+
+rule init:
+    output:
+        flag = os.path.join(EXP_ROOT, ".init_complete")
+    shell:
+        """
+        mkdir -p {OUT_DIR} {LOG_DIR}
+        touch {output.flag}
+        """
+
+# ---------------------------------------------------------------------------
+# Step 1: preprocess HeteroA dataset
+# ---------------------------------------------------------------------------
+
+rule h01_preprocess_heteroa:
+    input:
+        init = rules.init.output.flag
+    output:
+        parent_data = os.path.join(DATA_ROOT, "processed", "ParentData.pt"),
+        fold_data = expand(os.path.join(DATA_ROOT, "processed", "FOLD_{fold}", "Data.pt"),
+                          fold=range(CFG.get("step_01_heteroa", {}).get("k_folds", 5))),
+        flag = step_flag("01")
+    params:
+        script = os.path.join(SCRIPT_DIR, "make_heteroa.py"),
+        seed = CFG.get("step_01_heteroa", {}).get("seed", SEED),
+        url = CFG.get("step_01_heteroa", {}).get("url", "https://github.com/luoyunan/PyDTINet/raw/main/data.tar.gz"),
+        k_folds = CFG.get("step_01_heteroa", {}).get("k_folds", 5),
+        train_prop = CFG.get("step_01_heteroa", {}).get("train_prop", 0.9),
+        pp_thresh = CFG.get("step_01_heteroa", {}).get("pp_thresh", 90),
+        dd_thresh = CFG.get("step_01_heteroa", {}).get("dd_thresh", 0.9),
+        n_neg_samples = CFG.get("step_01_heteroa", {}).get("n_neg_samples", 500)
+    shell:
+        """
+        mkdir -p {DATA_ROOT}
+        python {params.script} \
+            --root {DATA_ROOT} \
+            --url {params.url} \
+            --k {params.k_folds} \
+            --train_p {params.train_prop} \
+            --pp_thresh {params.pp_thresh} \
+            --dd_thresh {params.dd_thresh} \
+            --seed {params.seed} \
+            --n_neg_samples {params.n_neg_samples}
+        touch {output.flag}
+        """
+
+# ---------------------------------------------------------------------------
+# Step 2: train Complex2 model on each fold
+# ---------------------------------------------------------------------------
+
+rule h02_train_complex2:
+    input:
+        heteroa_complete = step_flag("01"),
+        fold_data = os.path.join(DATA_ROOT, "processed", "FOLD_{fold}", "Data.pt")
+    output:
+        valid_metrics = os.path.join(OUT_DIR, "complex2", "FOLD_{fold}", "valid_metrics.csv"),
+        test_metrics = os.path.join(OUT_DIR, "complex2", "FOLD_{fold}", "test_metrics.csv"),
+        flag = os.path.join(EXP_ROOT, ".02_FOLD_{fold}_complete")
+    params:
+        script = os.path.join(SCRIPT_DIR, "train_complex2.py"),
+        optim = CFG.get("step_02_complex2", {}).get("optim", "adam"),
+        wd = CFG.get("step_02_complex2", {}).get("wd", 0),
+        channels = CFG.get("step_02_complex2", {}).get("channels", 512),
+        batch_size = CFG.get("step_02_complex2", {}).get("batch_size", 10000),
+        n_epochs = CFG.get("step_02_complex2", {}).get("n_epochs", 100),
+        num_workers = CFG.get("step_02_complex2", {}).get("num_workers", 12),
+        lr = CFG.get("step_02_complex2", {}).get("lr", 0.01),
+        dropout = CFG.get("step_02_complex2", {}).get("dropout", 0.0),
+        lr_scheduler = "--lr_scheduler" if CFG.get("step_02_complex2", {}).get("lr_scheduler", False) else "",
+        verbose = "--verbose" if CFG.get("step_02_complex2", {}).get("verbose", False) else "",
+        log_every = CFG.get("step_02_complex2", {}).get("log_every", 1),
+        patience = CFG.get("step_02_complex2", {}).get("patience", 10),
+        use_cpu = "--use_cpu" if CFG.get("step_02_complex2", {}).get("use_cpu", False) else "",
+        target_relation = CFG.get("step_02_complex2", {}).get("target_relation", "drug,drug->target->protein,protein"),
+        target_metric = CFG.get("step_02_complex2", {}).get("target_metric", "mrr"),
+        remove_relation_idx = "--remove_relation_idx {}".format(CFG.get("step_02_complex2", {}).get("remove_relation_idx")) if CFG.get("step_02_complex2", {}).get("remove_relation_idx") is not None else ""
+    shell:
+        """
+        mkdir -p {OUT_DIR}/complex2/FOLD_{wildcards.fold}
+        TARGET_REL='{params.target_relation}'
+        python {params.script} \
+            --data {DATA_ROOT}/processed/FOLD_{wildcards.fold}/ \
+            --out {OUT_DIR}/complex2/FOLD_{wildcards.fold}/ \
+            --optim {params.optim} \
+            --wd {params.wd} \
+            --channels {params.channels} \
+            --batch_size {params.batch_size} \
+            --n_epochs {params.n_epochs} \
+            --num_workers {params.num_workers} \
+            --lr {params.lr} \
+            --dropout {params.dropout} \
+            {params.lr_scheduler} \
+            {params.verbose} \
+            --log_every {params.log_every} \
+            --patience {params.patience} \
+            {params.use_cpu} \
+            --target_relation "$TARGET_REL" \
+            --target_metric {params.target_metric} \
+            {params.remove_relation_idx}
+        touch {output.flag}
+        """
+
+# ---------------------------------------------------------------------------
+# Step 3: train GNN model on each fold
+# ---------------------------------------------------------------------------
+
+rule h03_train_gnn:
+    input:
+        fold_data = os.path.join(DATA_ROOT, "processed", "FOLD_{fold}", "Data.pt"),
+        complex2_complete = os.path.join(EXP_ROOT, ".02_FOLD_{fold}_complete")
+    output:
+        valid_metrics = os.path.join(OUT_DIR, "gnn", "FOLD_{fold}", "valid_metrics.csv"),
+        test_metrics = os.path.join(OUT_DIR, "gnn", "FOLD_{fold}", "test_metrics.csv"),
+        flag = os.path.join(EXP_ROOT, ".03_FOLD_{fold}_complete")
+    params:
+        script = os.path.join(SCRIPT_DIR, "train_gnn.py"),
+        wd = CFG.get("step_03_gnn", {}).get("wd", 0),
+        channels = CFG.get("step_03_gnn", {}).get("channels", 8),
+        layers = CFG.get("step_03_gnn", {}).get("layers", 4),
+        batch_size = CFG.get("step_03_gnn", {}).get("batch_size", 5),
+        n_epochs = CFG.get("step_03_gnn", {}).get("n_epochs", 100),
+        num_workers = CFG.get("step_03_gnn", {}).get("num_workers", 12),
+        lr = CFG.get("step_03_gnn", {}).get("lr", 0.001),
+        dropout = CFG.get("step_03_gnn", {}).get("dropout", 0.0),
+        verbose = "--verbose" if CFG.get("step_03_gnn", {}).get("verbose", False) else "",
+        nonlin = CFG.get("step_03_gnn", {}).get("nonlin", "elu"),
+        heads = CFG.get("step_03_gnn", {}).get("heads", 1),
+        bias = "--bias" if CFG.get("step_03_gnn", {}).get("bias", False) else "",
+        edge_dim = CFG.get("step_03_gnn", {}).get("edge_dim", 4),
+        checkpoint = "--checkpoint" if CFG.get("step_03_gnn", {}).get("checkpoint", False) else "",
+        log_every = CFG.get("step_03_gnn", {}).get("log_every", 1),
+        residual = "--residual" if CFG.get("step_03_gnn", {}).get("residual", False) else "",
+        compile = "--compile" if CFG.get("step_03_gnn", {}).get("compile", False) else "",
+        norm = CFG.get("step_03_gnn", {}).get("norm", "layer"),
+        patience = CFG.get("step_03_gnn", {}).get("patience", 5),
+        conv = CFG.get("step_03_gnn", {}).get("conv", "gat"),
+        target_metric = CFG.get("step_03_gnn", {}).get("target_metric", "mrr"),
+        target_relation = CFG.get("step_03_gnn", {}).get("target_relation", "drug,drug->target->protein,protein"),
+        heteroA = "--heteroA" if CFG.get("step_03_gnn", {}).get("heteroA", True) else "",
+        remove_relation_idx = "--remove_relation_idx {}".format(CFG.get("step_03_gnn", {}).get("remove_relation_idx")) if CFG.get("step_03_gnn", {}).get("remove_relation_idx") is not None else ""
+    shell:
+        """
+        mkdir -p {OUT_DIR}/gnn/FOLD_{wildcards.fold}
+        TARGET_REL='{params.target_relation}'
+        python {params.script} \
+            --data {DATA_ROOT}/processed/FOLD_{wildcards.fold}/ \
+            --out {OUT_DIR}/gnn/FOLD_{wildcards.fold}/ \
+            --wd {params.wd} \
+            --channels {params.channels} \
+            --layers {params.layers} \
+            --batch_size {params.batch_size} \
+            --n_epochs {params.n_epochs} \
+            --num_workers {params.num_workers} \
+            --lr {params.lr} \
+            --dropout {params.dropout} \
+            {params.verbose} \
+            --nonlin {params.nonlin} \
+            --heads {params.heads} \
+            {params.bias} \
+            --edge_dim {params.edge_dim} \
+            {params.checkpoint} \
+            --log_every {params.log_every} \
+            {params.residual} \
+            {params.compile} \
+            --norm {params.norm} \
+            --patience {params.patience} \
+            --conv {params.conv} \
+            --target_metric {params.target_metric} \
+            --target_relation "$TARGET_REL" \
+            {params.heteroA} \
+            {params.remove_relation_idx}
+        touch {output.flag}
+        """
+
+# ---------------------------------------------------------------------------
+# Aggregate rules for training all folds
+# ---------------------------------------------------------------------------
+
+rule train_all_complex2:
+    input:
+        expand(os.path.join(EXP_ROOT, ".02_FOLD_{fold}_complete"),
+               fold=range(CFG.get("step_01_heteroa", {}).get("k_folds", 5)))
+    output:
+        flag = step_flag("02_all")
+    shell:
+        """
+        touch {output.flag}
+        """
+
+rule train_all_gnn:
+    input:
+        expand(os.path.join(EXP_ROOT, ".03_FOLD_{fold}_complete"),
+               fold=range(CFG.get("step_01_heteroa", {}).get("k_folds", 5)))
+    output:
+        flag = step_flag("03_all")
+    shell:
+        """
+        touch {output.flag}
+        """

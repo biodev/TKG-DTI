@@ -15,6 +15,10 @@ def get_args():
     parser.add_argument('--extdata', type=str, default='../../extdata/', help='Path to the extra data dir')
     parser.add_argument('--out', type=str, default='../../output/', help='Path to the output data dir')
     parser.add_argument('--seed', type=int, default=0, help='Random seed for reproducibility')
+    parser.add_argument('--model_name', type=str, default='Rostlab/prot_bert', help='Model name for ProtBert')
+    parser.add_argument('--batch_size', type=int, default=128, help='Batch size for embedding')
+    parser.add_argument('--repr', type=str, default='mean', help='Representation type for embedding')
+    parser.add_argument('--max_len', type=int, default=2048, help='Maximum length of amino acid sequence')
     return parser.parse_args()
 
 
@@ -95,8 +99,13 @@ if __name__ == '__main__':
     # Embed amino acid sequences
     aas = gene2aa.sequence.values
     print('embedding amino acid sequences...')
-    embedder = AA2EMB()
-    outputs = embedder.embed(aas).cpu().numpy()
+    embedder = AA2EMB(model_name=args.model_name, 
+                      batch_size=args.batch_size, 
+                      max_len=args.max_len,
+                      repr=args.repr)
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    outputs = embedder.embed(aas, device=device).cpu().numpy()
+    print(f'embeddings shape: {outputs.shape}')
 
     aas_dict = {'amino_acids': aas, 'embeddings': outputs, 'meta_df': gene2aa}
     torch.save(aas_dict, f'{args.out}/meta/aas_dict.pt')

@@ -1,6 +1,4 @@
 
-from transformers import AutoTokenizer, AutoModel
-from transformers import AutoTokenizer, AutoModelForMaskedLM
 import torch
 import numpy as np
 from rdkit import Chem
@@ -12,6 +10,7 @@ from sklearn.decomposition import PCA
 import umap
 from sklearn.cluster import DBSCAN
 import torchvision
+from tkgdti.embed.SMILES2EMB import SMILES2EMB
 
 import os
 import argparse 
@@ -34,6 +33,7 @@ def get_args():
     parser.add_argument("--method", type=str, default='knn', help="How to threshold similarity [options: threshold, knn]")
     parser.add_argument("--q_threshold", type=float, default=0.95, help="Quantile threshold for cosine similarity")
     parser.add_argument("--knn_k", type=int, default=3, help="Number of nearest neighbors for knn thresholding")
+    parser.add_argument("--batch_size", type=int, default=128, help="Batch size for embedding")
 
 
     return parser.parse_args()
@@ -54,7 +54,10 @@ def get_dds(z_drug, smiles):
                 continue
 
             res['cos_sim'].append(cosine_similarity([z_drug[i]], [z_drug[j]])[0][0])
-            res['mse'].append(np.mean((z_drug[i] - z_drug[j])**2))
+            # Convert PyTorch tensors to numpy for MSE calculation
+            z_i = z_drug[i].numpy() if hasattr(z_drug[i], 'numpy') else z_drug[i]
+            z_j = z_drug[j].numpy() if hasattr(z_drug[j], 'numpy') else z_drug[j]
+            res['mse'].append(np.mean((z_i - z_j)**2))
             res['drug_i'].append(i)
             res['drug_j'].append(j)
     
@@ -90,39 +93,17 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
     ##############################
 
-    tokenizer = AutoTokenizer.from_pretrained(args.model_name, 
-                                              use_safetensors = True, 
-                                              trust_remote_code=True )
-
-    model = AutoModelForMaskedLM.from_pretrained(args.model_name, 
-                                                use_safetensors = True, 
-                                                trust_remote_code=True )
+    sm2emb = SMILES2EMB(model_name=args.model_name, batch_size=args.batch_size, repr=args.repr)
 
     drug_info = pd.read_csv(f'{args.out}/meta/targetome__drug_targets_gene.csv')
 
+    inchi2inhibitor = drug_info[['inchikey', 'inhibitor']].drop_duplicates().set_index('inchikey')['inhibitor'].to_dict()
 
     smiles = drug_info['smiles'].unique().astype(str).tolist()
-    max_len = max([len(s) for s in smiles]) + 1
-    print('max token length:', max_len)
 
-    inputs = tokenizer(
-                        smiles,
-                        return_tensors="pt",
-                        padding=True,
-                        truncation=True,
-                        max_length=max_len  # Adjust max_length as needed
-                      )
-
-    with torch.no_grad():
-        outputs = model(**inputs, output_hidden_states=True, return_dict=True)
-
-
-    if args.repr == 'cls': 
-        z_drug = outputs.hidden_states[-1][:, 0, :].numpy() # extract the [CLS] token embedding
-    elif args.repr == 'mean': 
-        raise NotImplementedError('mean representation not implemented')
-    else: 
-        raise ValueError(f'invalid representation: {args.repr}')
+    device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    
+    z_drug = sm2emb.embed(smiles, device=device, verbose=True)
 
     sim_res = get_dds(z_drug, smiles)
 
@@ -143,18 +124,21 @@ if __name__ == "__main__":
     sim_res = sim_res.merge(s2i, left_on='smiles_i', right_on='smiles', how='left').drop(columns='smiles')
     sim_res = sim_res.merge(s2i, left_on='smiles_j', right_on='smiles', how='left').drop(columns='smiles')
 
+    sim_res = sim_res.assign(inhibitor_x = sim_res['inchikey_x'].map(inchi2inhibitor),
+                             inhibitor_y = sim_res['inchikey_y'].map(inchi2inhibitor))
+
     print('summary:')
     print('-'*100)
     if args.method == 'threshold': 
         print(f'Cosine similarity threshold: {threshold:.2f}')
     elif args.method == 'knn': 
         print(f'KNN thresholding with k={args.knn_k}')
-    print(f'# of similar drug pairs: {sim_res["is_similar"].sum()} [{sim_res["is_similar"].mean():.2f}]')
-    print(f'# of non-similar drug pairs: {sim_res["is_similar"].sum()} [{sim_res["is_similar"].mean():.2f}]') 
-    print('example rows [similar]:')
-    print(sim_res[lambda x: x['is_similar']].head(3))
-    print('example rows [non-similar]:')
-    print(sim_res[lambda x: ~x['is_similar']].head(3))
+    print(f'# of similar drug pairs: {sim_res["is_similar"].sum()} [p={sim_res["is_similar"].mean():.2f}]')
+    print(f'# of non-similar drug pairs: {(~sim_res["is_similar"]).sum()} [p={(~sim_res["is_similar"]).mean():.2f}]') 
+    print('examples [similar]:')
+    print(sim_res[lambda x: x['is_similar']].head(5)[['inhibitor_x', 'inhibitor_y', 'cos_sim']])
+    print('examples [non-similar]:')
+    print(sim_res[lambda x: ~x['is_similar']].head(5)[['inhibitor_x', 'inhibitor_y', 'cos_sim']])
     print('-'*100)
 
     sim_res.to_csv(f'{args.out}/meta/chemberta_drug_drug_similarity.csv', index=False)
