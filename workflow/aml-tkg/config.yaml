@@ -120,7 +120,7 @@ step_09d:
 # 10: kg_construction_10_make_tkg.py
 step_10:
   seed: 0
-  k_folds: 5                             # Number of K-fold cross-validation splits
+  k_folds: 10                             # Number of K-fold cross-validation splits
   val_prop: 0.05                         # Proportion of training data for validation
   tkg_output_dir: "tkge_no_patient"       # Output directory name for TKG data
   relations_root: "relations"             # Root directory containing relation CSV files  

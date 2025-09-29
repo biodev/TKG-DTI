@@ -70,8 +70,8 @@ def main():
 
     train_df = train_df.merge(drug_info, left_on=['smiles_can', 'seq'], right_on=['smiles', 'sequence'], how='left')
 
-    jglaser_smiles = drug_info.smiles.unique()
-    jglaser_aas = drug_info.sequence.unique()
+    jglaser_smiles = train_df.smiles_can.unique()
+    jglaser_aas = train_df.seq.unique()
 
     kg_smiles = drug_info.smiles.unique()
     kg_aas = drug_info.sequence.unique()
