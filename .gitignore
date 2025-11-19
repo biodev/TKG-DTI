@@ -1,5 +1,7 @@
 /data/
 /output/
+/extdata/ 
+/data/
 /deprecated/training_curves/
 **/__pycache__
 *.egg-info
