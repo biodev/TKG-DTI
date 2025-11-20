@@ -9,7 +9,7 @@ from tkgdti.data.utils import get_smiles_inchikey, get_protein_sequence_uniprot
 import argparse 
 import pubchempy as pcp
 from concurrent.futures import ThreadPoolExecutor, as_completed
-
+import rdkit.Chem as Chem
 
 
 def get_args(): 
@@ -27,7 +27,7 @@ def get_args():
 def load_tge(args): 
     
     tge_meta = pd.read_csv(f'{args.data}/targetome_extended_drugs-01-23-25.csv', low_memory=False)
-    tge_meta = tge_meta[['inchi_key', 'drug_name', 'molecule_type', 'clinical_phase']].rename({'drug_name':'inhibitor'}, axis=1).drop_duplicates()
+    tge_meta = tge_meta[['inchi_key', 'drug_name', 'molecule_type', 'clinical_phase', 'inchi']].rename({'drug_name':'inhibitor'}, axis=1).drop_duplicates()
 
     tge = pd.read_csv(f'{args.data}/targetome_extended-01-23-25.csv')
     tge = tge.assign(targetome_adj_tier='TIER_1')
@@ -47,105 +47,35 @@ def load_tge(args):
 
     tge = tge[lambda x: x.inhibitor.isin(drug_names)] # filter to beataml drugs 
 
-    drug_info = get_drug_props(drug_names) 
+    inchi2smiles = get_smiles_from_inchi(tge.inchi.values)
 
-    tge = tge.merge(drug_info, on='inchikey', how='left')
+    tge = tge.merge(inchi2smiles, on='inchi', how='left')
 
-    tge = tge.drop(columns='inhibitor_x').rename(columns={'inhibitor_y': 'inhibitor'}) # use TG inhibitor names 
+    #tge = tge.drop(columns='inhibitor_x').rename(columns={'inhibitor_y': 'inhibitor'}) # use TG inhibitor names 
 
     return tge 
 
+def get_smiles_from_inchi(inchis, verbose=True):
 
+    inchis = np.unique(inchis).tolist() 
 
-def get_drug_props(drug_names): 
+    res = {'inchi': [], 'smiles': []}
+    for i, inchi in enumerate(inchis):    
+        if verbose:
+            print(f"progress: {i}/{len(inchis)}", end="\r")
+        mol = Chem.MolFromInchi(inchi)
+        if mol is not None:
+            smiles_string = Chem.MolToSmiles(mol)
+            res['inchi'].append(inchi)
+            res['smiles'].append(smiles_string)
+        else:
+            res['inchi'].append(inchi)
+            res['smiles'].append(None)
 
-    if os.path.exists(f'{args.extdata}/tg_inchikeys.csv'):
-        print('NOTE: using cached drug info [delete `extadata/tg_inchikeys.csv` if this is not desired]')
-        drug_info = pd.read_csv(f'{args.extdata}/tg_inchikeys.csv')
-        return drug_info 
+    res = pd.DataFrame(res)
 
-    drug_info = [] ; failed = []
-    for drug in tqdm(drug_names, desc='retrieving INCHIKEYs + SMILES'):
+    return res
 
-        try: 
-            di = pcp.get_properties(properties=['smiles', 'inchikey'], 
-                                            identifier=drug, 
-                                            namespace='name', 
-                                            as_dataframe=True ).assign(inhibitor=drug).reset_index() 
-            di = di.iloc[[0]] # select first row to ensure 1:1 mapping 
-            drug_info.append(di)
-        except: 
-            failed.append(drug)
-
-    print('failed to retrieve smiles for: ', failed)
-
-    drug_info = pd.concat(drug_info, axis=0)
-    drug_info = drug_info.drop_duplicates().rename(columns={'CID':'cid', 'SMILES':'smiles', 'InChIKey':'inchikey'})
-
-    drug_info.to_csv(f'{args.extdata}/tg_inchikeys.csv', index=False)
-
-    return drug_info 
-
-def get_drug_props_mt(drug_names, max_workers: int = 12):
-    """Multithreaded retrieval of PubChem SMILES/InChIKey for a list of drug names.
-
-    This mirrors the behavior of `get_drug_props` but performs requests in parallel
-    for significantly faster wall-clock time on large drug sets.
-
-    Notes:
-    - Respects the same cache file at `{args.extdata}/tg_inchikeys.csv`.
-    - Uses the first PubChem result for each name, matching the original heuristic.
-    """
-
-    cache_path = f"{args.extdata}/tg_inchikeys.csv"
-    if os.path.exists(cache_path):
-        print('NOTE: using cached drug info [delete `extadata/tg_inchikeys.csv` if this is not desired]')
-        return pd.read_csv(cache_path)
-
-    def fetch_one(drug_name: str):
-        try:
-            df = pcp.get_properties(
-                properties=['smiles', 'inchikey'],
-                identifier=drug_name,
-                namespace='name',
-                as_dataframe=True,
-            )
-            if df is None or getattr(df, 'empty', True):
-                return None, drug_name
-            df = df.assign(inhibitor=drug_name).reset_index()
-            df = df.iloc[[0]]  # ensure 1:1 mapping by selecting first result
-            return df, None
-        except Exception:
-            return None, drug_name
-
-    unique_drugs = list(set(drug_names))
-    futures = []
-    results = []
-    failed = []
-
-    with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        futures = {executor.submit(fetch_one, drug): drug for drug in unique_drugs}
-        for fut in tqdm(as_completed(futures), total=len(futures), desc=f'PubChem (mt, {max_workers} threads)'):
-            df, fail = fut.result()
-            if df is not None:
-                results.append(df)
-            elif fail is not None:
-                failed.append(fail)
-
-    if failed:
-        print('failed to retrieve smiles for: ', failed)
-
-    if len(results) == 0:
-        # Fall back to empty DataFrame with expected columns
-        out = pd.DataFrame(columns=['inhibitor', 'cid', 'smiles', 'inchikey'])
-        out.to_csv(cache_path, index=False)
-        return out
-
-    drug_info = pd.concat(results, axis=0)
-    # Normalize column names to match the original convention
-    drug_info = drug_info.drop_duplicates().rename(columns={'CID': 'cid', 'SMILES': 'smiles', 'InChIKey': 'inchikey'})
-    drug_info.to_csv(cache_path, index=False)
-    return drug_info
 
 def filter_dtis(dtis, args): 
 
