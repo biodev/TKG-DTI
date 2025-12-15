@@ -147,4 +147,14 @@ step_11:
   target_metric: "mrr"                   # metric to use for early stopping [hits@10, mrr, auroc]
   remove_relation_idx: null              # index of relation to remove from knowledge graph
 
+# 13: aggregate_fold_predictions.py
+step_13:
+  min_fnr: 0.5                           # minimum FNR threshold (keep predictions scoring above this fraction of known DTIs)
+                                         # higher = stricter filter (e.g., 0.9 keeps only top 10% vs known DTIs)
+  max_fpr: 1.0                           # maximum FPR threshold (keep predictions above (1-max_fpr) fraction of negatives)
+                                         # lower = stricter filter (e.g., 0.1 keeps only top 10% vs negatives)
+  n_thresholds: 250                      # number of thresholds for metric interpolation
+  min_folds: 1                           # minimum number of folds a prediction must appear in
+  model_dir: "complex2"                  # directory containing FOLD_X subdirectories with predictions
+
 

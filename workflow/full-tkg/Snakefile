@@ -51,6 +51,8 @@ rule all:
         # ensure step 11 (complex2 training) is part of the default build
         expand(os.path.join(EXP_ROOT, ".11_FOLD_{fold}_complete"), 
                fold=range(CFG.get("step_10", {}).get("k_folds", 5))),
+        # ensure step 13 (aggregate predictions) is part of the default build
+        step_flag("13"),
 
 # ---------------------------------------------------------------------------
 # Rule: initialize experiment directories
@@ -688,6 +690,48 @@ rule train_all_complex2:
         flag = step_flag("11_all")
     shell:
         """
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 13: aggregate predictions across folds
+# ---------------------------------------------------------------------------
+
+rule k13_aggregate_predictions:
+    input:
+        # Depend on all folds being trained
+        fold_flags = expand(os.path.join(EXP_ROOT, ".11_FOLD_{fold}_complete"), 
+                           fold=range(CFG.get("step_10", {}).get("k_folds", 5))),
+        # Data.pt from any fold (they should all have the same node mappings)
+        data_pt = os.path.join(OUT_DIR, CFG.get("step_10", {}).get("tkg_output_dir", "tkge_no_patient"), "processed", "FOLD_0", "Data.pt"),
+        # Targetome metadata
+        targetome = os.path.join(OUT_DIR, "meta", "targetome__drug_targets_gene.csv")
+    output:
+        aggregated_preds = os.path.join(OUT_DIR, "complex2", "aggregated_predictions.csv"),
+        summary = os.path.join(OUT_DIR, "complex2", "aggregation_summary.csv"),
+        flag = step_flag("13")
+    params:
+        script = os.path.join(SCRIPT_DIR, "aggregate_fold_predictions.py"),
+        k_folds = CFG.get("step_10", {}).get("k_folds", 5),
+        min_fnr = CFG.get("step_13", {}).get("min_fnr", 0.5),
+        max_fpr = CFG.get("step_13", {}).get("max_fpr", 1.0),
+        n_thresholds = CFG.get("step_13", {}).get("n_thresholds", 250),
+        min_folds = CFG.get("step_13", {}).get("min_folds", 1),
+        model_dir = CFG.get("step_13", {}).get("model_dir", "complex2")
+    shell:
+        """
+        mkdir -p {OUT_DIR}/{params.model_dir}
+        python {params.script} \
+            --root {OUT_DIR}/{params.model_dir} \
+            --data_path {input.data_pt} \
+            --targetome_path {input.targetome} \
+            --out {OUT_DIR}/{params.model_dir} \
+            --k_folds {params.k_folds} \
+            --min_fnr {params.min_fnr} \
+            --max_fpr {params.max_fpr} \
+            --n_thresholds {params.n_thresholds} \
+            --min_folds {params.min_folds}
         touch {output.flag}
         """
 
