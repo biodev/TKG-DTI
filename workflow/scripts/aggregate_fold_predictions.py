@@ -38,8 +38,8 @@ def get_args():
                         help="Maximum FPR threshold (keep predictions scoring above (1-max_fpr) fraction of negatives)")
     parser.add_argument("--n_thresholds", type=int, default=250,
                         help="Number of thresholds to use for metric interpolation")
-    parser.add_argument("--min_folds", type=int, default=1,
-                        help="Minimum number of folds a prediction must appear in to be included")
+    parser.add_argument("--min_n_folds", type=int, default=1,
+                        help="Minimum number of folds a prediction must appear in (applied after aggregation)")
     
     return parser.parse_args()
 
@@ -226,7 +226,7 @@ def main():
     print(f"Min FNR: {args.min_fnr}")
     print(f"Max FPR: {args.max_fpr}")
     print(f"N thresholds: {args.n_thresholds}")
-    print(f"Min folds: {args.min_folds}")
+    print(f"Min N folds: {args.min_n_folds}")
     print("=" * 80)
     
     # Create output directory
@@ -283,11 +283,6 @@ def main():
     preds2 = preds2.assign(score_mean=[np.mean(x) for x in preds2.score])
     preds2 = preds2.assign(in_n_folds=[len(x) for x in preds2.fnr_est])
     
-    # Filter by minimum fold count
-    if args.min_folds > 1:
-        print(f"\nFiltering predictions appearing in >= {args.min_folds} folds...")
-        preds2 = preds2[preds2.in_n_folds >= args.min_folds]
-    
     print(f"Predictions after aggregation: {preds2.shape[0]}")
     
     # Add metadata
@@ -302,7 +297,10 @@ def main():
     
     # Sort by fnr_est_mean descending (higher = stronger evidence)
     preds2 = preds2.sort_values('fnr_est_mean', ascending=False)
-    
+
+    # final column for filtering by in_n_folds 
+    preds2 = preds2[lambda x: x.in_n_folds >= args.min_n_folds]
+
     # Save aggregated predictions
     out_path = os.path.join(args.out, 'aggregated_predictions.csv')
     print(f"\nSaving aggregated predictions to: {out_path}")
@@ -311,6 +309,7 @@ def main():
     preds2_save = preds2.copy()
     for col in ['score', 'fnr_est', 'fpr_est', 'tnr_est', 'tpr_est']:
         preds2_save[col] = preds2_save[col].apply(lambda x: str(x))
+
     
     preds2_save.to_csv(out_path, index=False)
     
@@ -321,7 +320,7 @@ def main():
         'min_fnr': args.min_fnr,
         'max_fpr': args.max_fpr,
         'n_thresholds': args.n_thresholds,
-        'min_folds': args.min_folds,
+        'min_n_folds': args.min_n_folds,
         'n_predictions': preds2.shape[0],
         'n_unique_drugs': preds2.drug.nunique(),
         'n_unique_proteins': preds2.protein.nunique(),

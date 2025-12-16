@@ -154,7 +154,7 @@ step_13:
   max_fpr: 1.0                           # maximum FPR threshold (keep predictions above (1-max_fpr) fraction of negatives)
                                          # lower = stricter filter (e.g., 0.1 keeps only top 10% vs negatives)
   n_thresholds: 250                      # number of thresholds for metric interpolation
-  min_folds: 1                           # minimum number of folds a prediction must appear in
+  min_n_folds: 2                         # minimum number of folds a prediction must appear in (applied after aggregation)
   model_dir: "complex2"                  # directory containing FOLD_X subdirectories with predictions
 
 

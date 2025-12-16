@@ -717,7 +717,7 @@ rule k13_aggregate_predictions:
         min_fnr = CFG.get("step_13", {}).get("min_fnr", 0.5),
         max_fpr = CFG.get("step_13", {}).get("max_fpr", 1.0),
         n_thresholds = CFG.get("step_13", {}).get("n_thresholds", 250),
-        min_folds = CFG.get("step_13", {}).get("min_folds", 1),
+        min_n_folds = CFG.get("step_13", {}).get("min_n_folds", 1),
         model_dir = CFG.get("step_13", {}).get("model_dir", "complex2")
     shell:
         """
@@ -731,7 +731,7 @@ rule k13_aggregate_predictions:
             --min_fnr {params.min_fnr} \
             --max_fpr {params.max_fpr} \
             --n_thresholds {params.n_thresholds} \
-            --min_folds {params.min_folds}
+            --min_n_folds {params.min_n_folds}
         touch {output.flag}
         """
 
