@@ -6,7 +6,6 @@ from tkgdti.train.utils import device_and_data_loading, training_inits
 import os
 import time 
 from tkgdti.train.EarlyStopper import EarlyStopper
-from sklearn.metrics import roc_auc_score
 import pandas as pd
 import uuid
 from tkgdti.eval.evaluate import evaluate

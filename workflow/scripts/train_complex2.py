@@ -2,13 +2,8 @@
 
 '''
 
-
-
 import argparse
 from tkgdti.train.train_gekc import train_gekc
-from tkgdti.train.train_gnn import train_gnn
-import os
-import torch
 
 def get_args():
     

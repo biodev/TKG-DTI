@@ -40,6 +40,11 @@ This [site](https://www.probes-drugs.org/compound/PD003501/) suggests MAP4K1 is 
 
 --- 
 
+3. Penfluridol	ADRA1A
+
+
+--- 
+
 inhibitor	gene_symbol	uniprot_id	fnr_est_mean	in_n_folds
 Alvocidib	CLK1	P49759	0.992502	10
 R-406	MAP4K1	Q92918	0.981329	10

@@ -17,7 +17,7 @@ dirs:
   script_dir: "/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/workflow/scripts"    # absolute path to workflow scripts
 
 experiment:
-  id: "full-tkg-01"
+  id: "full-tkg-02" # lower nM threshold
   seed: 0
 
 shared:
@@ -41,7 +41,7 @@ shared:
 step_01:
   seed: 0
   assay_types: ["Kd", "Ki", "IC50", "EC50"]         # options: Kd, Ki, IC50, EC50
-  max_assay_value: 1000               # nM threshold
+  max_assay_value: 100               # nM threshold
   TIERS: ["TIER_1"]                   # options: TIER_1..TIER_5*
 
 # 02: kg_construction_02__drug_similar_drug.py
@@ -114,34 +114,34 @@ step_09c:
 
 # 09d: kg_construction_09d__predicted_binding_affinity.py
 step_09d:
-  q_weak: 0.05
-  q_strong: 0.95
+  q_weak: 0.01
+  q_strong: 0.99
 
 # 10: kg_construction_10_make_tkg.py
 step_10:
   seed: 0
   k_folds: 10                             # Number of K-fold cross-validation splits
   val_prop: 0.05                         # Proportion of training data for validation
-  tkg_output_dir: "tkge_no_patient"       # Output directory name for TKG data
+  tkg_output_dir: "targetomeKG"       # Output directory name for TKG data
   relations_root: "relations"             # Root directory containing relation CSV files  
   exclude_patient_relations: true         # Exclude relations involving patient data
-  no_rev: false                           # Exclude reverse relations (_rev files)
+  no_rev: true                           # Exclude reverse relations (_rev files)
 
 # 11: train_complex2.py
 step_11:
   optim: "adam"                          # optimizer [adam, adagrad, adan]
   wd: 0                                  # weight decay
-  channels: 512                         # number of hidden channels
+  channels: 1024                         # number of hidden channels
   batch_size: 10000                      # batch size
   n_epochs: 100                          # number of training epochs
   num_workers: 12                        # number of data loader workers
-  lr: 0.01                               # learning rate
+  lr: 0.005                               # learning rate
   dropout: 0.0                           # dropout rate
   lr_scheduler: false                    # whether to use lr scheduler (reduce on plateau)
   verbose: false                         # verbosity
   log_every: 1                           # how often to log validation performance during training
   target_relations: null                 # target relations to use for loss scaling
-  patience: 10                           # early stopping patience; log_every*patience epochs without improvement
+  patience: 5                           # early stopping patience; log_every*patience epochs without improvement
   use_cpu: false                         # use cpu instead of gpu
   target_relation: "drug,targets,gene"   # tuple key of target relation
   target_metric: "mrr"                   # metric to use for early stopping [hits@10, mrr, auroc]
