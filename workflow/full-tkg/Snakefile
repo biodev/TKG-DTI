@@ -53,6 +53,8 @@ rule all:
                fold=range(CFG.get("step_10", {}).get("k_folds", 5))),
         # ensure step 13 (aggregate predictions) is part of the default build
         step_flag("13"),
+        # ensure step 14 (filter targetome from predictions) is part of the default build
+        step_flag("14"),
 
 # ---------------------------------------------------------------------------
 # Rule: initialize experiment directories
@@ -735,5 +737,28 @@ rule k13_aggregate_predictions:
         touch {output.flag}
         """
 
+
+# ---------------------------------------------------------------------------
+# Step 14: filter targetome annotations from predictions
+# ---------------------------------------------------------------------------
+
+rule k14_filter_targetome_from_predictions:
+    input:
+        aggregated_preds = rules.k13_aggregate_predictions.output.aggregated_preds
+    output:
+        filtered_preds = os.path.join(OUT_DIR, CFG.get("step_13", {}).get("model_dir", "complex2"), "aggregated_and_filtered_predictions.csv"),
+        flag = step_flag("14")
+    params:
+        script = os.path.join(SCRIPT_DIR, "filter_targetome_from_predictions.py"),
+        targetome_expanded_path = CFG.get("step_14", {}).get("targetome_expanded_path", ""),
+        model_dir = CFG.get("step_13", {}).get("model_dir", "complex2")
+    shell:
+        """
+        python {params.script} \
+            --aggregated_predictions {input.aggregated_preds} \
+            --targetome_path {params.targetome_expanded_path} \
+            --out {OUT_DIR}/{params.model_dir}
+        touch {output.flag}
+        """
 
 

@@ -157,4 +157,8 @@ step_13:
   min_n_folds: 2                         # minimum number of folds a prediction must appear in (applied after aggregation)
   model_dir: "complex2"                  # directory containing FOLD_X subdirectories with predictions
 
+# 14: filter_targetome_from_predictions.py
+step_14:
+  targetome_expanded_path: "/home/exacloud/gscratch/mcweeney_lab/evans/data/targetome_extended-01-23-25.csv"  # path to targetome_expanded CSV
+
 
