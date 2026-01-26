@@ -6,7 +6,6 @@ from tkgdti.train.utils import device_and_data_loading, training_inits
 import os
 import time 
 from tkgdti.train.EarlyStopper import EarlyStopper
-from sklearn.metrics import roc_auc_score
 import pandas as pd
 import uuid
 from tkgdti.eval.evaluate import evaluate
@@ -45,17 +44,17 @@ def predict_all(data, train_triples, valid_triples, test_triples, model, device,
                         tail=tails[idx].to(device))
             scores.append(out.detach().cpu())
 
+
     scores = torch.cat(scores)
 
     heads = heads.detach().cpu().numpy()
     tails = tails.detach().cpu().numpy()
     scores = scores.detach().cpu().numpy()
+
     
-    df = pd.DataFrame({'drug': heads, 'protein': tails, 'score': scores.ravel(), 
-                       'drug_name': np.array(data['node_name_dict'][head_target])[heads], 
-                       'prot_name': np.array(data['node_name_dict'][tail_target])[tails],
-                       'drug_name': np.array(data['node_name_dict'][head_target])[heads], 
-                       'prot_name': np.array(data['node_name_dict'][tail_target])[tails]})
+    df = pd.DataFrame({'drug': heads, 'protein': tails, 'score': scores.ravel()})
+                       #'drug_name': np.array(data['node_name_dict'][head_target])[heads], 
+                       # 'prot_name': np.array(data['node_name_dict'][tail_target])[tails]})
 
     dti_mask = train_triples['relation'] == target_relint
     train_heads = train_triples['head'][dti_mask]
@@ -74,19 +73,125 @@ def predict_all(data, train_triples, valid_triples, test_triples, model, device,
 
     df = df.assign(negatives = ~(df['train'] | df['valid'] | df['test']))
 
-    # use min/max to scale scores to prob 
+    # use min/max to scale scores to make a "prob-like" score 
     df['prob'] = (df['score'] - df['score'].min()) / (df['score'].max() - df['score'].min())
 
     return df
 
 
-def eval(data, train_triples, valid_triples, test_triples, model, device, batch_size, 
-         target_relint, head_target, tail_target, partition='valid'):
+def predict_with_negatives(data, train_triples, valid_triples, test_triples, model, device, 
+                          batch_size=10000, target_relint=None, head_target='drug', tail_target='protein',
+                          verbose=True, partition='valid'):
+    """
+    Predict scores for positive edges and pre-sampled negative edges only.
+    This is much more tractable for large datasets.
+    """
+    import os
     
-    df = predict_all(data, train_triples, valid_triples, test_triples, model, device, batch_size=batch_size,
-                    target_relint=target_relint, head_target=head_target, tail_target=tail_target, verbose=True)
+    # Load negative samples from the data directory
+    data_dir = data.get('data_dir', None)
+    if data_dir is None:
+        raise ValueError("Data directory not specified. Required for loading negative samples.")
+    
+    # Load negative samples
+    neg_valid_path = os.path.join(data_dir, "neg_valid.pt")
+    neg_test_path = os.path.join(data_dir, "neg_test.pt")
+    
+    if not os.path.exists(neg_valid_path) or not os.path.exists(neg_test_path):
+        raise FileNotFoundError(f"Negative samples not found. Run negative sampling script first.")
+    
+    neg_valid = torch.load(neg_valid_path)
+    neg_test = torch.load(neg_test_path)
+    
+    # Check if negative samples are properly generated (not None placeholders)
+    if neg_valid['head'] is None or neg_test['head'] is None:
+        raise ValueError("Negative samples contain None values. Please run the negative sampling script first.")
+    
+    # Select the appropriate negative set based on partition
+    if partition == 'valid':
+        neg_triples = neg_valid
+        pos_triples = valid_triples
+    elif partition == 'test':
+        neg_triples = neg_test
+        pos_triples = test_triples
+    else:
+        raise ValueError(f"Unsupported partition for negatives evaluation: {partition}")
+    
+    # Filter for target relation
+    pos_mask = pos_triples['relation'] == target_relint
+    pos_heads = pos_triples['head'][pos_mask]
+    pos_tails = pos_triples['tail'][pos_mask]
+    
+    neg_mask = neg_triples['relation'] == target_relint
+    neg_heads = neg_triples['head'][neg_mask]
+    neg_tails = neg_triples['tail'][neg_mask]
+    
+    # Ensure all heads and tails are tensors for concatenation
+    if not isinstance(pos_heads, torch.Tensor):
+        pos_heads = torch.tensor(pos_heads, dtype=torch.long)
+    if not isinstance(pos_tails, torch.Tensor):
+        pos_tails = torch.tensor(pos_tails, dtype=torch.long)
+    if not isinstance(neg_heads, torch.Tensor):
+        neg_heads = torch.tensor(neg_heads, dtype=torch.long)
+    if not isinstance(neg_tails, torch.Tensor):
+        neg_tails = torch.tensor(neg_tails, dtype=torch.long)
+    
+    # Combine positive and negative edges
+    all_heads = torch.cat([pos_heads, neg_heads])
+    all_tails = torch.cat([pos_tails, neg_tails])
+    all_relations = torch.tensor([target_relint] * len(all_heads), dtype=torch.long)
+    
+    # Predict scores
+    scores = []
+    with torch.no_grad():
+        for idx in torch.split(torch.arange(len(all_heads)), batch_size):
+            if verbose: 
+                print(f'[predicting with negatives, progress: {idx[0].item()}/{len(all_heads)}]', end='\r')
+            
+            out = model(head=all_heads[idx].to(device), 
+                       relation=all_relations[idx].to(device), 
+                       tail=all_tails[idx].to(device))
+            scores.append(out.detach().cpu())
+    
+    
+    scores = torch.cat(scores)
+    
+    # Convert to numpy
+    all_heads = all_heads.detach().cpu().numpy()
+    all_tails = all_tails.detach().cpu().numpy()
+    scores = scores.detach().cpu().numpy()
+    
+    # Create DataFrame
+    df = pd.DataFrame({
+        'drug': all_heads, 
+        'protein': all_tails, 
+        'score': scores.ravel()
+    })
+    
+    # Add partition labels
+    n_pos = len(pos_heads)
+    df[partition] = [True] * n_pos + [False] * (len(df) - n_pos)
+    df['negative_sample'] = [False] * n_pos + [True] * (len(df) - n_pos)
+    
+    # Normalize scores to probabilities
+    df['prob'] = (df['score'] - df['score'].min()) / (df['score'].max() - df['score'].min())
+    
+    return df
 
-    _metrics = evaluate(df, partition=partition, verbose=False)
+
+def eval(data, train_triples, valid_triples, test_triples, model, device, batch_size, 
+         target_relint, head_target, tail_target, partition='valid', eval_method='all'):
+    
+    if eval_method == 'all':
+        df = predict_all(data, train_triples, valid_triples, test_triples, model, device, batch_size=batch_size,
+                        target_relint=target_relint, head_target=head_target, tail_target=tail_target, verbose=True)
+    elif eval_method == 'negatives':
+        df = predict_with_negatives(data, train_triples, valid_triples, test_triples, model, device, batch_size=batch_size,
+                                   target_relint=target_relint, head_target=head_target, tail_target=tail_target, verbose=True, partition=partition)
+    else:
+        raise ValueError(f"Unknown eval_method: {eval_method}")
+
+    _metrics = evaluate(df, partition=partition, verbose=True, method=eval_method)
 
     mrr = _metrics['MRR']
     topat10 = _metrics['Top10']
@@ -108,6 +213,13 @@ def train_gekc(config, kwargs=None):
     kwargs.out = kwargs.out + '/' + str(uid)
 
     device, data, train_triples, valid_triples, valid_neg_triples, test_triples, test_neg_triples = device_and_data_loading(kwargs, return_test=True)
+    
+    # Add data directory for loading negative samples
+    data['data_dir'] = kwargs.data
+    
+    # Set default eval_method if not specified
+    if not hasattr(kwargs, 'eval_method'):
+        kwargs.eval_method = 'all'
 
     if kwargs.use_cpu: 
         device = 'cpu'
@@ -188,7 +300,8 @@ def train_gekc(config, kwargs=None):
                                                  kwargs.batch_size, 
                                                  target_relint, 
                                                  head_target, 
-                                                 tail_target)
+                                                 tail_target,
+                                                 eval_method=kwargs.eval_method)
             metrics['mrr'].append(mrr)
             metrics['top@10'].append(topat10)
             metrics['top@100'].append(topat100)
@@ -220,13 +333,29 @@ def train_gekc(config, kwargs=None):
     best_model = model 
     best_model.load_state_dict(best_model_state_dict)
 
-    df = predict_all(data, train_triples, valid_triples, test_triples, best_model, device, batch_size=kwargs.batch_size,
-                     target_relint=target_relint, head_target=head_target, tail_target=tail_target)
+    if kwargs.eval_method == 'all':
+        df = predict_all(data, train_triples, valid_triples, test_triples, best_model, device, batch_size=kwargs.batch_size,
+                         target_relint=target_relint, head_target=head_target, tail_target=tail_target)
+    elif kwargs.eval_method == 'negatives':
+        # For negatives method, we need to create separate dataframes for validation and test
+        df_valid = predict_with_negatives(data, train_triples, valid_triples, test_triples, best_model, device, 
+                                         batch_size=kwargs.batch_size, target_relint=target_relint, 
+                                         head_target=head_target, tail_target=tail_target, partition='valid')
+        df_test = predict_with_negatives(data, train_triples, valid_triples, test_triples, best_model, device, 
+                                        batch_size=kwargs.batch_size, target_relint=target_relint, 
+                                        head_target=head_target, tail_target=tail_target, partition='test')
+        # For compatibility with the existing workflow, combine them for saving
+        df = pd.concat([df_valid, df_test], ignore_index=True)
+    else:
+        raise ValueError(f"Unknown eval_method: {kwargs.eval_method}")
     
     df.to_csv(f'{kwargs.out}/predictions.csv', index=False)
 
     #val metrics 
-    val_metrics = evaluate(df, partition='valid')
+    if kwargs.eval_method == 'all':
+        val_metrics = evaluate(df, partition='valid', method=kwargs.eval_method)
+    else:
+        val_metrics = evaluate(df_valid, partition='valid', method=kwargs.eval_method)
 
     print('valid set metrics:')
     print(val_metrics)
@@ -247,7 +376,10 @@ def train_gekc(config, kwargs=None):
         raise 
     
     # test metrics 
-    test_metrics = evaluate(df, partition='test')
+    if kwargs.eval_method == 'all':
+        test_metrics = evaluate(df, partition='test', method=kwargs.eval_method)
+    else:
+        test_metrics = evaluate(df_test, partition='test', method=kwargs.eval_method)
 
     print('test set metrics:')
     print(test_metrics)
@@ -271,50 +403,3 @@ def train_gekc(config, kwargs=None):
         f.write(f'{uid}\n')
 
     return uid, val_metrics, test_metrics
-
-
-
-
-
-
-
-'''
-deprecated 
-
-
-def eval(loader, model, device='cpu', nneg=10000, tail_target='protein'): 
-    
-    ranks = [] 
-    y = [] 
-    yhat = []
-    for i, (pos_head, pos_tail, pos_relation) in enumerate(loader):
-
-        print(f'val batch [{i}/{len(loader)}]', end='\r')
-        with torch.no_grad(): 
-
-            pos_head = pos_head.to(device)
-            pos_tail = pos_tail.to(device)
-            pos_relation = pos_relation.to(device)
-
-            pos_scores = model.forward(head=pos_head, relation=pos_relation, tail=pos_tail).squeeze(-1)
-
-            pos_head_ = pos_head.view(-1, 1).expand(-1, nneg).contiguous().view(-1)
-            pos_relation_ = pos_relation.view(-1, 1).expand(-1, nneg).contiguous().view(-1)
-            neg_tail = torch.randint(0, model.data['num_nodes_dict'][tail_target], (pos_head.size(0), nneg)).to(device).view(-1)
-            neg_scores = model.forward(head=pos_head_, relation=pos_relation_, tail=neg_tail).view(-1, nneg)
-
-            ranks.append( (neg_scores >= pos_scores.view(-1, 1)).sum(-1) + 1 )
-            y.append( torch.cat((torch.ones_like(pos_scores), torch.zeros_like(neg_scores.view(-1))), dim=-1) )
-            yhat.append( torch.cat([pos_scores, neg_scores.view(-1)], dim=-1) )
-            
-    y = torch.cat(y, dim=0)
-    yhat = torch.cat(yhat, dim=0)
-    ranks = torch.cat(ranks, dim=0)
-    mrr = (1/ranks.float()).mean().item()
-    topat10 = (ranks <= 10).float().mean().item()
-    topat100 = (ranks <= 100).float().mean().item()
-    auroc = roc_auc_score(y.detach().cpu().numpy(), yhat.detach().cpu().numpy())
-
-    return mrr, topat10, topat100, auroc
-
-'''

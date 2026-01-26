@@ -1,0 +1,164 @@
+###############################################################################
+# AML-TKG configuration for KG construction (01 -> 09d)
+#
+# Shared roots
+# - dirs.data_root:    all input data under this directory
+# - dirs.out_root:     experiment outputs will be placed under out_root/{experiment.id}
+# - experiment.id:     unique identifier; creates unique output directories per config
+# - experiment.seed:   default random seed for scripts (can be overridden per-step)
+#
+# Shared model/embedding config used by multiple steps
+# - shared.prot_model_name / smiles_model_name etc. used in 09a; optional parity with 02/08a
+###############################################################################
+
+dirs:
+  data_root: "/home/exacloud/gscratch/mcweeney_lab/evans/data/"     # e.g., /home/.../TKG-DTI/data
+  out_root:  "/home/exacloud/gscratch/mcweeney_lab/evans/outputs_/TKGDTI_workflow"     # e.g., /home/.../TKG-DTI/runs
+  script_dir: "/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/workflow/scripts"    # absolute path to workflow scripts
+
+experiment:
+  id: "full-tkg-02" # lower nM threshold
+  seed: 0
+
+shared:
+  # protein embedding (ProtBert)
+  prot_model_name: facebook/esm2_t30_150M_UR50D  #"Rostlab/prot_bert" # facebook/esm2_t33_650M_UR50D
+  prot_repr: "mean"
+  prot_batch_size: 64
+  prot_max_len: 1024
+
+  # drug embedding (ChemBERTa)
+  smiles_model_name: yzimmermann/ChemBERTa-zinc-base-v1-safetensors #"yzimmermann/ChemBERTa-77M-MLM-safetensors" # 
+  smiles_repr: "mean"
+  smiles_batch_size: 128
+  smiles_max_len: 1024
+
+###############################################################################
+# Per-script configuration (arguments map to the corresponding script flags)
+###############################################################################
+
+# 01: kg_construction_01__drug_interacts_protein.py
+step_01:
+  seed: 0
+  assay_types: ["Kd", "Ki", "IC50", "EC50"]         # options: Kd, Ki, IC50, EC50
+  max_assay_value: 100               # nM threshold
+  TIERS: ["TIER_1"]                   # options: TIER_1..TIER_5*
+
+# 02: kg_construction_02__drug_similar_drug.py
+step_02:
+  seed: 0
+  method: "threshold"                       # options: threshold, knn
+  q_threshold: 0.95
+  knn_k: 3
+
+# 03: kg_construction_03__drug_associates_disease.py
+step_03:
+  seed: 0
+
+# 04: kg_construction_04__protein_associates_disease.py
+step_04:
+  seed: 0
+
+# 05: kg_construction_05__protein_interacts_protein.py
+step_05:
+  seed: 0
+
+# 06: kg_construction_06__protein_isin_pathway.py
+step_06:
+  seed: 0
+
+# 07: kg_construction_07__lincs_drug_perturbed_expression.py
+step_07:
+  seed: 0
+  score_threshold: 5                   # 0-10
+  sig_sign: "-"                        # options: '-', '+', '+/-'
+
+# 08a: kg_construction_08a__embed_amino_acids.py
+step_08a:
+  seed: 0
+
+# 08b: kg_construction_08b__protein_protein_similarity.py
+step_08b:
+  seed: 0
+  sim_quantile: 0.999
+
+# 09a: kg_construction_09a__binding_affinity_make.py
+step_09a:
+  seed: 0
+  train_split: "train[:90%]"
+  test_split: "train[90%:]"
+
+# 09b: kg_construction_09b__binding_affinity_train.py
+step_09b:
+  seed: 1
+  nsamples: 100
+  batch_size: 10000
+  lr: 1e-4
+  num_epochs: 25
+  hidden_channels: 256
+  layers: 2
+  stochastic_channels: 32
+  hnet_width: 128                          # hypernet width
+  p_val: 0.5
+  wd: 0.0                                  # weight decay
+  norm: "layer"                            # normalization type ['none', 'layer'] # NOTE: batch doesn't work with hypernet
+  nonlin: "elu"                            # nonlinearity type
+  dropout: 0.0                             # dropout rate
+  learn_pz: true                          # learn pz boolean flag
+
+# 09c: kg_construction_09c__binding_affinity_eval.py
+step_09c:
+  samples: 200
+  batch_size: 10000
+  device: "auto"                       # options: auto, cpu, cuda
+
+# 09d: kg_construction_09d__predicted_binding_affinity.py
+step_09d:
+  q_weak: 0.01
+  q_strong: 0.99
+
+# 10: kg_construction_10_make_tkg.py
+step_10:
+  seed: 0
+  k_folds: 10                             # Number of K-fold cross-validation splits
+  val_prop: 0.05                         # Proportion of training data for validation
+  tkg_output_dir: "targetomeKG"       # Output directory name for TKG data
+  relations_root: "relations"             # Root directory containing relation CSV files  
+  exclude_patient_relations: true         # Exclude relations involving patient data
+  no_rev: true                           # Exclude reverse relations (_rev files)
+
+# 11: train_complex2.py
+step_11:
+  optim: "adam"                          # optimizer [adam, adagrad, adan]
+  wd: 0                                  # weight decay
+  channels: 1024                         # number of hidden channels
+  batch_size: 10000                      # batch size
+  n_epochs: 100                          # number of training epochs
+  num_workers: 12                        # number of data loader workers
+  lr: 0.005                               # learning rate
+  dropout: 0.0                           # dropout rate
+  lr_scheduler: false                    # whether to use lr scheduler (reduce on plateau)
+  verbose: false                         # verbosity
+  log_every: 1                           # how often to log validation performance during training
+  target_relations: null                 # target relations to use for loss scaling
+  patience: 5                           # early stopping patience; log_every*patience epochs without improvement
+  use_cpu: false                         # use cpu instead of gpu
+  target_relation: "drug,targets,gene"   # tuple key of target relation
+  target_metric: "mrr"                   # metric to use for early stopping [hits@10, mrr, auroc]
+  remove_relation_idx: null              # index of relation to remove from knowledge graph
+
+# 13: aggregate_fold_predictions.py
+step_13:
+  min_fnr: 0.5                           # minimum FNR threshold (keep predictions scoring above this fraction of known DTIs)
+                                         # higher = stricter filter (e.g., 0.9 keeps only top 10% vs known DTIs)
+  max_fpr: 1.0                           # maximum FPR threshold (keep predictions above (1-max_fpr) fraction of negatives)
+                                         # lower = stricter filter (e.g., 0.1 keeps only top 10% vs negatives)
+  n_thresholds: 250                      # number of thresholds for metric interpolation
+  min_n_folds: 2                         # minimum number of folds a prediction must appear in (applied after aggregation)
+  model_dir: "complex2"                  # directory containing FOLD_X subdirectories with predictions
+
+# 14: filter_targetome_from_predictions.py
+step_14:
+  targetome_expanded_path: "/home/exacloud/gscratch/mcweeney_lab/evans/data/targetome_extended-01-23-25.csv"  # path to targetome_expanded CSV
+
+

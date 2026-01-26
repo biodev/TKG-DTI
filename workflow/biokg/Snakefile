@@ -1,0 +1,178 @@
+###############################################################################
+# BioKG Snakemake pipeline for OGB BioKG knowledge graph processing
+# Author: Nathaniel J Evans (evansna@ohsu.edu)
+#
+# This Snakefile processes the OGB BioKG dataset and trains Complex2
+# models for drug-target interaction prediction.
+#
+# Pipeline steps:
+# 1. preprocess_biokg: Download and preprocess the OGB BioKG dataset
+# 2. create_negatives: Generate negative samples for evaluation
+# 3. train_complex2: Train Complex2 model
+#
+# Config file: workflow/biokg/config.yaml
+###############################################################################
+
+import os
+
+configfile: "config.yaml"
+
+CFG = config
+
+# ---------------------------------------------------------------------------
+# Directories (all outputs will be saved under EXP_ROOT)
+# ---------------------------------------------------------------------------
+
+EXP_ID = CFG["experiment"]["id"]
+SEED = int(CFG["experiment"].get("seed", 0))
+DATA_ROOT = CFG["dirs"]["data_root"]
+OUT_ROOT = CFG["dirs"]["out_root"]
+SCRIPT_DIR = CFG["dirs"].get("script_dir", os.path.join("workflow", "scripts"))
+
+EXP_ROOT = os.path.join(OUT_ROOT, EXP_ID)
+OUT_DIR = os.path.join(EXP_ROOT, "output")
+LOG_DIR = os.path.join(EXP_ROOT, "logs")
+
+def step_flag(step: str):
+    return os.path.join(EXP_ROOT, f".{step}_complete")
+
+# ---------------------------------------------------------------------------
+# Default target: build entire pipeline
+# ---------------------------------------------------------------------------
+
+rule all:
+    input:
+        # Ensure BioKG preprocessing is complete
+        step_flag("01"),
+        # Ensure negative sampling is complete
+        step_flag("02"),
+        # Ensure Complex2 training is complete
+        step_flag("03"),
+
+# ---------------------------------------------------------------------------
+# Rule: initialize experiment directories
+# ---------------------------------------------------------------------------
+
+rule init:
+    output:
+        flag = os.path.join(EXP_ROOT, ".init_complete")
+    shell:
+        """
+        mkdir -p {OUT_DIR} {LOG_DIR}
+        touch {output.flag}
+        """
+
+# ---------------------------------------------------------------------------
+# Step 1: preprocess BioKG dataset
+# ---------------------------------------------------------------------------
+
+rule b01_preprocess_biokg:
+    input:
+        init = rules.init.output.flag
+    output:
+        data_pt = os.path.join(DATA_ROOT, "processed", "Data.pt"),
+        pos_train = os.path.join(DATA_ROOT, "processed", "pos_train.pt"),
+        pos_valid = os.path.join(DATA_ROOT, "processed", "pos_valid.pt"),
+        pos_test = os.path.join(DATA_ROOT, "processed", "pos_test.pt"),
+        flag = step_flag("01")
+    params:
+        script = os.path.join(SCRIPT_DIR, "make_biokg.py")
+    shell:
+        """
+        mkdir -p {DATA_ROOT}
+        python {params.script} \
+            --root {DATA_ROOT}
+        touch {output.flag}
+        """
+
+# ---------------------------------------------------------------------------
+# Step 2: create negative samples for evaluation
+# ---------------------------------------------------------------------------
+
+rule b02_create_negatives:
+    input:
+        biokg_complete = step_flag("01"),
+        data_pt = os.path.join(DATA_ROOT, "processed", "Data.pt"),
+        pos_train = os.path.join(DATA_ROOT, "processed", "pos_train.pt"),
+        pos_valid = os.path.join(DATA_ROOT, "processed", "pos_valid.pt"),
+        pos_test = os.path.join(DATA_ROOT, "processed", "pos_test.pt")
+    output:
+        neg_valid = os.path.join(DATA_ROOT, "processed", "neg_valid.pt"),
+        neg_test = os.path.join(DATA_ROOT, "processed", "neg_test.pt"),
+        flag = step_flag("02")
+    params:
+        script = os.path.join(SCRIPT_DIR, "create_biokg_negatives.py"),
+        target_relation = CFG.get("negative_sampling", {}).get("target_relation", "drug,drug-protein,protein"),
+        n_neg_per_pos = CFG.get("negative_sampling", {}).get("n_neg_per_pos", 500),
+        corruption_mode = CFG.get("negative_sampling", {}).get("corruption_mode", "both"),
+        seed = CFG.get("negative_sampling", {}).get("seed", SEED)
+    shell:
+        """
+        python {params.script} \
+            --data_root {DATA_ROOT} \
+            --target_relation "{params.target_relation}" \
+            --n_neg_per_pos {params.n_neg_per_pos} \
+            --corruption_mode {params.corruption_mode} \
+            --seed {params.seed}
+        touch {output.flag}
+        """
+
+# ---------------------------------------------------------------------------
+# Step 3: train Complex2 model
+# ---------------------------------------------------------------------------
+
+rule b03_train_complex2:
+    input:
+        biokg_complete = step_flag("01"),
+        negatives_complete = step_flag("02"),
+        data_pt = os.path.join(DATA_ROOT, "processed", "Data.pt"),
+        neg_valid = os.path.join(DATA_ROOT, "processed", "neg_valid.pt"),
+        neg_test = os.path.join(DATA_ROOT, "processed", "neg_test.pt")
+    output:
+        valid_metrics = os.path.join(OUT_DIR, "complex2", "valid_metrics.csv"),
+        test_metrics = os.path.join(OUT_DIR, "complex2", "test_metrics.csv"),
+        flag = step_flag("03")
+    params:
+        script = os.path.join(SCRIPT_DIR, "train_complex2.py"),
+        optim = CFG.get("step_03_complex2", {}).get("optim", "adam"),
+        wd = CFG.get("step_03_complex2", {}).get("wd", 0),
+        channels = CFG.get("step_03_complex2", {}).get("channels", 1024),
+        batch_size = CFG.get("step_03_complex2", {}).get("batch_size", 10000),
+        n_epochs = CFG.get("step_03_complex2", {}).get("n_epochs", 100),
+        num_workers = CFG.get("step_03_complex2", {}).get("num_workers", 10),
+        lr = CFG.get("step_03_complex2", {}).get("lr", 1e-3),
+        dropout = CFG.get("step_03_complex2", {}).get("dropout", 0.0),
+        lr_scheduler = "--lr_scheduler" if CFG.get("step_03_complex2", {}).get("lr_scheduler", False) else "",
+        verbose = "--verbose" if CFG.get("step_03_complex2", {}).get("verbose", False) else "",
+        log_every = CFG.get("step_03_complex2", {}).get("log_every", 5),
+        patience = CFG.get("step_03_complex2", {}).get("patience", 3),
+        use_cpu = "--use_cpu" if CFG.get("step_03_complex2", {}).get("use_cpu", False) else "",
+        target_relation = CFG.get("step_03_complex2", {}).get("target_relation", "drug,drug-protein,protein"),
+        target_metric = CFG.get("step_03_complex2", {}).get("target_metric", "mrr"),
+        remove_relation_idx = "--remove_relation_idx {}".format(CFG.get("step_03_complex2", {}).get("remove_relation_idx")) if CFG.get("step_03_complex2", {}).get("remove_relation_idx") is not None else "",
+        eval_method = CFG.get("step_03_complex2", {}).get("eval_method", "negatives")
+    shell:
+        """
+        mkdir -p {OUT_DIR}/complex2
+        python {params.script} \
+            --data {DATA_ROOT}/processed/ \
+            --out {OUT_DIR}/complex2/ \
+            --optim {params.optim} \
+            --wd {params.wd} \
+            --channels {params.channels} \
+            --batch_size {params.batch_size} \
+            --n_epochs {params.n_epochs} \
+            --num_workers {params.num_workers} \
+            --lr {params.lr} \
+            --dropout {params.dropout} \
+            {params.lr_scheduler} \
+            {params.verbose} \
+            --log_every {params.log_every} \
+            --patience {params.patience} \
+            {params.use_cpu} \
+            --target_relation "{params.target_relation}" \
+            --target_metric {params.target_metric} \
+            --eval_method {params.eval_method} \
+            {params.remove_relation_idx}
+        touch {output.flag}
+        """

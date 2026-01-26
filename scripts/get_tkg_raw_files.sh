@@ -1,6 +1,6 @@
 #!/bin/bash
 
-ROOT=../data/tkg_raw/
+ROOT=/home/exacloud/gscratch/mcweeney_lab/evans/data/
 
 #Blucher AS, Choonoo G, Kulesz-Martin M, Wu G, McWeeney SK. Evidence-Based Precision Oncology with the Cancer Targetome. Trends Pharmacol Sci. 2017 Dec;38(12):1085-1099. doi: 10.1016/j.tips.2017.08.006. Epub 2017 Sep 27. PMID: 28964549; PMCID: PMC5759325.
 #Bottomly D, Long N, Schultz AR, Kurtz SE, Tognon CE, Johnson K, Abel M, Agarwal A, Avaylon S, Benton E, Blucher A, Borate U, Braun TP, Brown J, Bryant J, Burke R, Carlos A, Chang BH, Cho HJ, Christy S, Coblentz C, Cohen AM, d'Almeida A, Cook R, Danilov A, Dao KT, Degnin M, Dibb J, Eide CA, English I, Hagler S, Harrelson H, Henson R, Ho H, Joshi SK, Junio B, Kaempf A, Kosaka Y, Laderas T, Lawhead M, Lee H, Leonard JT, Lin C, Lind EF, Liu SQ, Lo P, Loriaux MM, Luty S, Maxson JE, Macey T, Martinez J, Minnier J, Monteblanco A, Mori M, Morrow Q, Nelson D, Ramsdill J, Rofelty A, Rogers A, Romine KA, Ryabinin P, Saultz JN, Sampson DA, Savage SL, Schuff R, Searles R, Smith RL, Spurgeon SE, Sweeney T, Swords RT, Thapa A, Thiel-Klare K, Traer E, Wagner J, Wilmot B, Wolf J, Wu G, Yates A, Zhang H, Cogle CR, Collins RH, Deininger MW, Hourigan CS, Jordan CT, Lin TL, Martinez ME, Pallapati RR, Pollyea DA, Pomicter AD, Watts JM, Weir SJ, Druker BJ, McWeeney SK, Tyner JW. Integrative analysis of drug response and clinical outcome in acute myeloid leukemia. Cancer Cell. 2022 Aug 8;40(8):850-864.e9. doi: 10.1016/j.ccell.2022.07.002. Epub 2022 Jul 21. PMID: 35868306; PMCID: PMC9378589.

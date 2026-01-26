@@ -1,34 +1,35 @@
 name: tkgdti
-
-channels: 
-    - pytorch 
-    - nvidia 
-    - pyg
-    - defaults 
-    - conda-forge
-
+channels:
+  - pytorch
+  - nvidia
+  - pyg
+  - conda-forge
 dependencies:
-    - python=3.11
-    - matplotlib
-    - pyg
-    - pytorch
-    - numpy 
-    - pandas
-    - torchvision
-    - seaborn
-    - scikit-learn
-    - pytorch-cuda
-    - h5py
-    - tensorboard
-    - statsmodels
-    - pip
-    - pip:
-        - ipykernel
-        - umap-learn
-        - biopython
-        - omnipath 
-        - openpyxl
-        - transformers 
-        - rdkit-pypi
-        - ogb
-        - git+https://github.com/sail-sg/Adan.git
+  - python
+  - pytorch::pytorch
+  - pytorch::torchvision
+  - pytorch::pytorch-cuda
+  - pyg::pyg
+  - conda-forge::numpy
+  - conda-forge::pandas
+  - conda-forge::matplotlib
+  - conda-forge::seaborn
+  - conda-forge::scikit-learn
+  - conda-forge::transformers
+  - conda-forge::h5py
+  - conda-forge::tensorboard
+  - conda-forge::statsmodels
+  - conda-forge::pysftp
+  - conda-forge::pubchempy
+  - snakemake
+  - pip
+  - pip:
+      - ipykernel
+      - umap-learn
+      - snakemake
+      - biopython
+      - omnipath
+      - pypath-omnipath
+      - openpyxl
+      - rdkit
+      - ogb

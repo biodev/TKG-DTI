@@ -1,0 +1,80 @@
+###############################################################################
+# Hetero-A pipeline configuration for DTI knowledge graph processing
+#
+# This pipeline processes the DTINet HeteroA dataset and trains models for
+# drug-target interaction prediction using Complex2 and GNN approaches.
+#
+# Pipeline steps:
+# 1. preprocess_heteroa: Download and preprocess the HeteroA dataset
+# 2. train_complex2: Train Complex2 model on each K-fold
+# 3. train_gnn: Train GNN model on each K-fold
+###############################################################################
+
+dirs:
+  data_root: "/home/exacloud/gscratch/mcweeney_lab/evans/data/HeteroA/"
+  out_root: "/home/exacloud/gscratch/mcweeney_lab/evans/outputs_/hetero_a_workflow"
+  script_dir: "/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/workflow/scripts"
+
+experiment:
+  id: "heteroa-01"
+  seed: 0
+
+###############################################################################
+# Step-specific configuration
+###############################################################################
+
+# Step 1: preprocess HeteroA dataset (make_heteroa.py)
+step_01_heteroa:
+  seed: 0
+  url: "https://github.com/luoyunan/PyDTINet/raw/main/data.tar.gz"
+  k_folds: 5                           # Number of K-fold cross-validation splits
+  train_prop: 0.9                      # Proportion for training (rest goes to validation)
+  pp_thresh: 90                        # Threshold for protein-protein similarity binarization
+  dd_thresh: 0.9                       # Threshold for drug-drug similarity binarization
+  n_neg_samples: 500                   # DEPRECATED! Number of negative samples 
+
+# Step 2: train Complex2 model (train_complex2.py)
+step_02_complex2:
+  optim: "adam"                        # optimizer [adam, adagrad, adan]
+  wd: 0                                # weight decay
+  channels: 512                        # number of hidden channels
+  batch_size: 10000                    # batch size
+  n_epochs: 100                        # number of training epochs
+  num_workers: 12                      # number of data loader workers
+  lr: 0.01                             # learning rate
+  dropout: 0.0                         # dropout rate
+  lr_scheduler: false                  # whether to use lr scheduler (reduce on plateau)
+  verbose: false                       # verbosity
+  log_every: 1                         # how often to log validation performance during training
+  patience: 10                         # early stopping patience
+  use_cpu: false                       # use cpu instead of gpu
+  target_relation: "drug,drug->target->protein,protein"  # target relation tuple
+  target_metric: "mrr"                 # metric to use for early stopping [hits@10, mrr, auroc]
+  remove_relation_idx: null            # index of relation to remove from knowledge graph
+
+# Step 3: train GNN model (train_gnn.py)
+step_03_gnn:
+  wd: 1e-7                                # weight decay
+  channels: 12                          # number of hidden channels
+  layers: 4                            # number of GNN layers
+  batch_size: 5                        # batch size
+  n_epochs: 100                        # number of training epochs
+  num_workers: 12                      # number of data loader workers
+  lr: 0.001                            # learning rate
+  dropout: 0.1                         # dropout rate
+  verbose: false                       # verbosity
+  nonlin: "mish"                        # nonlinearity to use in GNN
+  heads: 2                             # number of attention heads
+  bias: false                          # whether to use bias in GNN layers
+  edge_dim: 6                          # dimension of edge features
+  checkpoint: false                    # whether to use gradient checkpointing
+  log_every: 1                         # log every n epochs
+  residual: true                      # whether to use residual connections
+  compile: false                       # whether to compile the model
+  norm: "layer"                        # normalization to use in GNN [layer, batch, none]
+  patience: 5                          # early stopping patience
+  conv: "gat"                          # GNN convolution to use
+  target_metric: "mrr"                 # metric to use for early stopping [hits@10, mrr, auroc]
+  target_relation: "drug,drug->target->protein,protein"  # target relation tuple
+  heteroA: true                        # whether the data is from the HeteroA dataset
+  remove_relation_idx: null            # index of relation to remove from knowledge graph

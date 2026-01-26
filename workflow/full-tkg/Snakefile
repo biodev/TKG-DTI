@@ -1,0 +1,764 @@
+###############################################################################
+# AML-TKG: Snakemake pipeline for KG construction (steps 01 -> 09d)
+# Author: Nathaniel J evans (evansna@ohsu.edu)
+#
+# This Snakefile sequences the kg_construction_XX scripts and manages inputs
+# and outputs via a configurable experiment root. It enforces step ordering via
+# per-step ".XX_complete" sentinel files under the experiment root.
+#
+# Config file: workflow/aml-tkg/config.yaml
+###############################################################################
+
+import os
+
+configfile: "config.yaml"
+
+CFG = config
+
+# ---------------------------------------------------------------------------
+# Directories (all outputs will be saved under EXP_ROOT)
+# ---------------------------------------------------------------------------
+
+EXP_ID    = CFG["experiment"]["id"]
+SEED      = int(CFG["experiment"].get("seed", 0))
+DATA_ROOT = CFG["dirs"]["data_root"]
+OUT_ROOT  = CFG["dirs"]["out_root"]
+SCRIPT_DIR = CFG["dirs"].get("script_dir", os.path.join("workflow", "scripts"))
+
+EXP_ROOT  = os.path.join(OUT_ROOT, EXP_ID)
+OUT_DIR   = os.path.join(EXP_ROOT, "output")
+EXT_DIR   = "../../extdata/"
+LOG_DIR   = os.path.join(EXP_ROOT, "logs")
+
+def step_flag(step: str):
+    return os.path.join(EXP_ROOT, f".{step}_complete")
+
+
+# ---------------------------------------------------------------------------
+# Default target: build entire pipeline
+# ---------------------------------------------------------------------------
+
+rule all:
+    input:
+        lambda wildcards: os.path.join(OUT_DIR, "relations", "jglaser__predicted_strong_binding_fwd.csv"),
+        lambda wildcards: os.path.join(OUT_DIR, "relations", "jglaser__predicted_strong_binding_rev.csv"),
+        # ensure step 02 (drug-drug similarity) is part of the default build
+        lambda wildcards: os.path.join(OUT_DIR, "relations", "chemberta_drug_cosine_similarity.csv"),
+        # ensure step 08b (protein-protein similarity) is part of the default build
+        lambda wildcards: os.path.join(OUT_DIR, "relations", "protbert__gene_gene_similarity.csv"),
+        # ensure step 10 (TKG construction) is part of the default build
+        step_flag("10"),
+        # ensure step 11 (complex2 training) is part of the default build
+        expand(os.path.join(EXP_ROOT, ".11_FOLD_{fold}_complete"), 
+               fold=range(CFG.get("step_10", {}).get("k_folds", 5))),
+        # ensure step 13 (aggregate predictions) is part of the default build
+        step_flag("13"),
+        # ensure step 14 (filter targetome from predictions) is part of the default build
+        step_flag("14"),
+
+# ---------------------------------------------------------------------------
+# Rule: initialize experiment directories
+# ---------------------------------------------------------------------------
+
+rule init:
+    output:
+        flag = os.path.join(EXP_ROOT, ".init_complete")
+    shell:
+        """
+        mkdir -p {OUT_DIR} {EXT_DIR} {LOG_DIR}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 01: drug interacts protein
+# ---------------------------------------------------------------------------
+
+rule k01_drug_interacts_protein:
+    input:
+        init = rules.init.output.flag
+    output:
+        meta = os.path.join(OUT_DIR, "meta", "targetome__drug_targets_gene.csv"),
+        rel = os.path.join(OUT_DIR, "relations", "targetome_drug_targets_gene_fwd.csv"),
+        flag = step_flag("01")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_01__drug_interacts_protein_TKG_EXT.py"),
+        seed = CFG.get("step_01", {}).get("seed", SEED),
+        assay_types = " ".join(CFG.get("step_01", {}).get("assay_types", [])),
+        max_assay_value = CFG.get("step_01", {}).get("max_assay_value", 1000),
+        tiers = " ".join(CFG.get("step_01", {}).get("TIERS", []))
+    shell:
+        """
+        mkdir -p {OUT_DIR}/meta {OUT_DIR}/relations {EXT_DIR}
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {EXT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed} \
+            --assay_types {params.assay_types} \
+            --max_assay_value {params.max_assay_value} \
+            --TIERS {params.tiers}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 02: drug similar drug (ChemBERTa sim)
+# ---------------------------------------------------------------------------
+
+rule k02_drug_similar_drug:
+    input:
+        prev = rules.k01_drug_interacts_protein.output.meta
+    output:
+        meta = os.path.join(OUT_DIR, "meta", "chemberta_drug_drug_similarity.csv"),
+        rel = os.path.join(OUT_DIR, "relations", "chemberta_drug_cosine_similarity.csv"),
+        flag = step_flag("02")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_02__drug_similar_drug.py"),
+        seed = CFG.get("step_02", {}).get("seed", SEED),
+        repr = CFG.get("shared", {}).get("smiles_repr", "mean"),
+        model_name = CFG.get("shared", {}).get("smiles_model_name", CFG.get("step_02", {}).get("model_name", "yzimmermann/ChemBERTa-77M-MLM-safetensors")),
+        method = CFG.get("step_02", {}).get("method", "knn"),
+        q_threshold = CFG.get("step_02", {}).get("q_threshold", 0.95),
+        knn_k = CFG.get("step_02", {}).get("knn_k", 3)
+    shell:
+        """
+        mkdir -p {OUT_DIR}/meta {OUT_DIR}/relations {EXT_DIR}
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {EXT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed} \
+            --repr {params.repr} \
+            --model_name {params.model_name} \
+            --method {params.method} \
+            --q_threshold {params.q_threshold} \
+            --knn_k {params.knn_k}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 03: drug associates disease (CTD)
+# ---------------------------------------------------------------------------
+
+rule k03_drug_associates_disease:
+    input:
+        prev = rules.k02_drug_similar_drug.output.flag
+    output:
+        meta = os.path.join(OUT_DIR, "meta", "CTD___drug_associates_disease.csv"),
+        rel_fwd = os.path.join(OUT_DIR, "relations", "ctd__drug_disease_association_fwd.csv"),
+        rel_rev = os.path.join(OUT_DIR, "relations", "ctd__drug_disease_association_rev.csv"),
+        disease_space = os.path.join(OUT_DIR, "meta", "disease_space.txt"),
+        flag = step_flag("03")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_03__drug_associates_disease.py"),
+        seed = CFG.get("step_03", {}).get("seed", SEED)
+    shell:
+        """
+        mkdir -p {OUT_DIR}/meta {OUT_DIR}/relations
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {EXT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 04: protein associates disease (CTD)
+# ---------------------------------------------------------------------------
+
+rule k04_protein_associates_disease:
+    input:
+        prev = rules.k03_drug_associates_disease.output.disease_space
+    output:
+        meta = os.path.join(OUT_DIR, "meta", "CTD__genes_diseases.csv"),
+        rel_fwd = os.path.join(OUT_DIR, "relations", "ctd_genes_diseases_fwd.csv"),
+        rel_rev = os.path.join(OUT_DIR, "relations", "ctd_genes_diseases_rev.csv"),
+        flag = step_flag("04")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_04__protein_associates_disease.py"),
+        seed = CFG.get("step_04", {}).get("seed", SEED)
+    shell:
+        """
+        mkdir -p {OUT_DIR}/meta {OUT_DIR}/relations
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {EXT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 05: protein interacts protein (OmniPath)
+# ---------------------------------------------------------------------------
+
+rule k05_protein_interacts_protein:
+    input:
+        prev = rules.k04_protein_associates_disease.output.flag
+    output:
+        meta = os.path.join(OUT_DIR, "meta", "omnipath__protein_interacts_protein.csv"),
+        rel_other_fwd = os.path.join(OUT_DIR, "relations", "omnipath_ppi_other_fwd.csv"),
+        rel_other_rev = os.path.join(OUT_DIR, "relations", "omnipath_ppi_other_rev.csv"),
+        rel_inhib_fwd = os.path.join(OUT_DIR, "relations", "omnipath_ppi_inhib_fwd.csv"),
+        rel_inhib_rev = os.path.join(OUT_DIR, "relations", "omnipath_ppi_inhib_rev.csv"),
+        rel_stim_fwd = os.path.join(OUT_DIR, "relations", "omnipath_ppi_stim_fwd.csv"),
+        rel_stim_rev = os.path.join(OUT_DIR, "relations", "omnipath_ppi_stim_rev.csv"),
+        flag = step_flag("05")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_05__protein_interacts_protein.py"),
+        seed = CFG.get("step_05", {}).get("seed", SEED)
+    shell:
+        """
+        mkdir -p {OUT_DIR}/meta {OUT_DIR}/relations
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {EXT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 06: protein isin pathway (CTD)
+# ---------------------------------------------------------------------------
+
+rule k06_protein_isin_pathway:
+    input:
+        prev = rules.k05_protein_interacts_protein.output.flag
+    output:
+        rel_fwd = os.path.join(OUT_DIR, "relations", "ctd_gene_isin_pathway_fwd.csv"),
+        rel_rev = os.path.join(OUT_DIR, "relations", "ctd_pathway_isin_gene_rev.csv"),
+        flag = step_flag("06")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_06__protein_isin_pathway.py"),
+        seed = CFG.get("step_06", {}).get("seed", SEED)
+    shell:
+        """
+        mkdir -p {OUT_DIR}/relations
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {EXT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 07: LINCS drug-perturbed expression
+# ---------------------------------------------------------------------------
+
+rule k07_lincs_drug_perturbed_expression:
+    input:
+        prev = rules.k06_protein_isin_pathway.output.flag
+    output:
+        # writes many per-cell relation files; use flag for flow control
+        flag = step_flag("07")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_07__lincs_drug_perturbed_expression.py"),
+        seed = CFG.get("step_07", {}).get("seed", SEED),
+        score_threshold = CFG.get("step_07", {}).get("score_threshold", 8),
+        sig_sign = CFG.get("step_07", {}).get("sig_sign", "-")
+    shell:
+        """
+        mkdir -p {OUT_DIR}/meta {OUT_DIR}/relations
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {EXT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed} \
+            --score_threshold {params.score_threshold} \
+            --sig_sign {params.sig_sign}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 08a: embed amino acids (ProtBert)
+# ---------------------------------------------------------------------------
+
+rule k08a_embed_amino_acids:
+    input:
+        prev = rules.k07_lincs_drug_perturbed_expression.output.flag
+    output:
+        gene2aa = os.path.join(OUT_DIR, "meta", "gene2aa.csv"),
+        aas_dict = os.path.join(OUT_DIR, "meta", "aas_dict.pt"),
+        flag = step_flag("08a")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_08a__embed_amino_acids.py"),
+        seed = CFG.get("step_08a", {}).get("seed", SEED),
+        model_name = CFG.get("shared", {}).get("prot_model_name", "Rostlab/prot_bert"),
+        batch_size = CFG.get("shared", {}).get("prot_batch_size", 128),
+        repr = CFG.get("shared", {}).get("prot_repr", "mean"),
+        max_len = CFG.get("shared", {}).get("prot_max_len", 2048)
+    shell:
+        """
+        mkdir -p {OUT_DIR}/meta
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {EXT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed} \
+            --model_name {params.model_name} \
+            --batch_size {params.batch_size} \
+            --repr {params.repr} \
+            --max_len {params.max_len}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 08x: sync key meta artifacts into EXT_DIR for later steps (09c)
+# ---------------------------------------------------------------------------
+
+## removed ext meta sync; downstream steps read directly from OUT_DIR
+# ---------------------------------------------------------------------------
+# Step 08b: protein-protein similarity (ProtBert)
+# ---------------------------------------------------------------------------
+
+rule k08b_protein_protein_similarity:
+    input:
+        prev = rules.k08a_embed_amino_acids.output.aas_dict
+    output:
+        rel = os.path.join(OUT_DIR, "relations", "protbert__gene_gene_similarity.csv"),
+        flag = step_flag("08b")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_08b__protein_protein_similarity.py"),
+        seed = CFG.get("step_08b", {}).get("seed", SEED),
+        sim_quantile = CFG.get("step_08b", {}).get("sim_quantile", 0.999)
+    shell:
+        """
+        mkdir -p {OUT_DIR}/relations {OUT_DIR}/meta
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {EXT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed} \
+            --sim_quantile {params.sim_quantile}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 09a: binding affinity data + embeddings (jglaser)
+# ---------------------------------------------------------------------------
+
+rule k09a_binding_affinity_make:
+    input:
+        prev = rules.k08b_protein_protein_similarity.output.flag
+    output:
+        data_csv = os.path.join(OUT_DIR, "jglaser", "jglaser_affinity_data.csv"),
+        z_prot = os.path.join(OUT_DIR, "jglaser", "z_prot.pt"),
+        z_drug = os.path.join(OUT_DIR, "jglaser", "z_drug.pt"),
+        aas_txt = os.path.join(OUT_DIR, "jglaser", "amino_acids.txt"),
+        smiles_txt = os.path.join(OUT_DIR, "jglaser", "smiles.txt"),
+        flag = step_flag("09a")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_09a__binding_affinity_make.py"),
+        seed = CFG.get("step_09a", {}).get("seed", SEED),
+        train_split = CFG.get("step_09a", {}).get("train_split", "train[:90%]"),
+        test_split = CFG.get("step_09a", {}).get("test_split", "train[90%:]"),
+        prot_model_name = CFG.get("shared", {}).get("prot_model_name", "Rostlab/prot_bert"),
+        prot_repr = CFG.get("shared", {}).get("prot_repr", "mean"),
+        prot_batch_size = CFG.get("shared", {}).get("prot_batch_size", 128),
+        prot_max_len = CFG.get("shared", {}).get("prot_max_len", 2048),
+        smiles_model_name = CFG.get("shared", {}).get("smiles_model_name", "yzimmermann/ChemBERTa-77M-MLM-safetensors"),
+        smiles_repr = CFG.get("shared", {}).get("smiles_repr", "mean"),
+        smiles_batch_size = CFG.get("shared", {}).get("smiles_batch_size", 128),
+        smiles_max_len = CFG.get("shared", {}).get("smiles_max_len", 2048)
+    shell:
+        """
+        mkdir -p {OUT_DIR}/jglaser
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {OUT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed} \
+            --train_split {params.train_split} \
+            --test_split {params.test_split} \
+            --prot_model_name {params.prot_model_name} \
+            --prot_repr {params.prot_repr} \
+            --prot_batch_size {params.prot_batch_size} \
+            --prot_max_len {params.prot_max_len} \
+            --smiles_model_name {params.smiles_model_name} \
+            --smiles_repr {params.smiles_repr} \
+            --smiles_batch_size {params.smiles_batch_size} \
+            --smiles_max_len {params.smiles_max_len}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 09b: train binding affinity model (HyperNet)
+# ---------------------------------------------------------------------------
+
+rule k09b_binding_affinity_train:
+    input:
+        data_csv = rules.k09a_binding_affinity_make.output.data_csv
+    output:
+        model = os.path.join(OUT_DIR, "jglaser", "model.pt"),
+        flag = step_flag("09b")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_09b__binding_affinity_train.py"),
+        seed = CFG.get("step_09b", {}).get("seed", SEED),
+        nsamples = CFG.get("step_09b", {}).get("nsamples", 100),
+        batch_size = CFG.get("step_09b", {}).get("batch_size", 5000),
+        lr = CFG.get("step_09b", {}).get("lr", 1e-4),
+        num_epochs = CFG.get("step_09b", {}).get("num_epochs", 50),
+        hidden_channels = CFG.get("step_09b", {}).get("hidden_channels", 256),
+        layers = CFG.get("step_09b", {}).get("layers", 3),
+        stochastic_channels = CFG.get("step_09b", {}).get("stochastic_channels", 4),
+        p_val = CFG.get("step_09b", {}).get("p_val", 0.05),
+        wd = CFG.get("step_09b", {}).get("wd", 0.0),
+        norm = CFG.get("step_09b", {}).get("norm", "batch"),
+        nonlin = CFG.get("step_09b", {}).get("nonlin", "elu"),
+        dropout = CFG.get("step_09b", {}).get("dropout", 0.0),
+        learn_pz = CFG.get("step_09b", {}).get("learn_pz", False),
+        hnet_width = CFG.get("step_09b", {}).get("hnet_width", 256)
+    shell:
+        """
+        mkdir -p {OUT_DIR} {OUT_DIR}/jglaser
+        python {params.script} \
+            --extdata {OUT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed} \
+            --nsamples {params.nsamples} \
+            --batch_size {params.batch_size} \
+            --lr {params.lr} \
+            --num_epochs {params.num_epochs} \
+            --hidden_channels {params.hidden_channels} \
+            --layers {params.layers} \
+            --stochastic_channels {params.stochastic_channels} \
+            --p_val {params.p_val} \
+            --wd {params.wd} \
+            --norm {params.norm} \
+            --nonlin {params.nonlin} \
+            --dropout {params.dropout} \
+            --learn_pz {params.learn_pz} \
+            --hnet_width {params.hnet_width}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 09c: evaluate + full grid predictions
+# ---------------------------------------------------------------------------
+
+rule k09c_binding_affinity_eval:
+    input:
+        model = rules.k09b_binding_affinity_train.output.model,
+        targetome = rules.k01_drug_interacts_protein.output.meta,
+        gene2aa = rules.k08a_embed_amino_acids.output.gene2aa,
+        aas_dict = rules.k08a_embed_amino_acids.output.aas_dict
+    output:
+        preds = os.path.join(OUT_DIR, "jglaser", "predictions.csv"),
+        flag = step_flag("09c")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_09c__binding_affinity_eval.py"),
+        samples = CFG.get("step_09c", {}).get("samples", 250),
+        batch_size = CFG.get("step_09c", {}).get("batch_size", 10000),
+        device = CFG.get("step_09c", {}).get("device", "auto"),
+        smiles_model_name = CFG.get("shared", {}).get("smiles_model_name", "yzimmermann/ChemBERTa-77M-MLM-safetensors"),
+        smiles_repr = CFG.get("shared", {}).get("smiles_repr", "mean"),
+        smiles_batch_size = CFG.get("shared", {}).get("smiles_batch_size", 128),
+        smiles_max_len = CFG.get("shared", {}).get("smiles_max_len", 2048)
+    shell:
+        """
+        mkdir -p {OUT_DIR} {OUT_DIR}/jglaser
+        python {params.script} \
+            --data {OUT_DIR} \
+            --out {OUT_DIR} \
+            --samples {params.samples} \
+            --batch_size {params.batch_size} \
+            --device {params.device} \
+            --smiles_model_name {params.smiles_model_name} \
+            --smiles_repr {params.smiles_repr} \
+            --smiles_batch_size {params.smiles_batch_size} \
+            --smiles_max_len {params.smiles_max_len}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 09d: post-process predictions -> strong binding relations
+# ---------------------------------------------------------------------------
+
+rule k09d_predicted_binding_affinity:
+    input:
+        preds = rules.k09c_binding_affinity_eval.output.preds
+    output:
+        rel_fwd = os.path.join(OUT_DIR, "relations", "jglaser__predicted_strong_binding_fwd.csv"),
+        rel_rev = os.path.join(OUT_DIR, "relations", "jglaser__predicted_strong_binding_rev.csv"),
+        flag = step_flag("09d")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_09d__predicted_binding_affinity.py"),
+        q_weak = CFG.get("step_09d", {}).get("q_weak", 0.05),
+        q_strong = CFG.get("step_09d", {}).get("q_strong", 0.95)
+    shell:
+        """
+        mkdir -p {OUT_DIR}/relations
+        python {params.script} \
+            --extdata {OUT_DIR} \
+            --out {OUT_DIR} \
+            --q_weak {params.q_weak} \
+            --q_strong {params.q_strong}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 10: build temporal knowledge graph with cross-validation folds
+# ---------------------------------------------------------------------------
+
+rule k10_make_tkg:
+    input:
+        prev = rules.k09d_predicted_binding_affinity.output.flag
+    output:
+        tkg_data = expand(os.path.join(OUT_DIR, CFG.get("step_10", {}).get("tkg_output_dir", "tkge_no_patient"), "processed", "FOLD_{fold}", "Data.pt"), 
+                         fold=range(CFG.get("step_10", {}).get("k_folds", 5))),
+        flag = step_flag("10")
+    params:
+        script = os.path.join(SCRIPT_DIR, "kg_construction_10_make_tkg.py"),
+        seed = CFG.get("step_10", {}).get("seed", SEED),
+        k_folds = CFG.get("step_10", {}).get("k_folds", 5),
+        val_prop = CFG.get("step_10", {}).get("val_prop", 0.075),
+        tkg_output_dir = CFG.get("step_10", {}).get("tkg_output_dir", "tkge_no_patient"),
+        relations_root = CFG.get("step_10", {}).get("relations_root", "relations"),
+        exclude_patient_relations = "--exclude_patient_relations" if CFG.get("step_10", {}).get("exclude_patient_relations", True) else "",
+        no_rev = "--no_rev" if CFG.get("step_10", {}).get("no_rev", False) else ""
+    shell:
+        """
+        mkdir -p {OUT_DIR}/{params.tkg_output_dir}
+        python {params.script} \
+            --data {DATA_ROOT} \
+            --extdata {OUT_DIR} \
+            --out {OUT_DIR} \
+            --seed {params.seed} \
+            --k_folds {params.k_folds} \
+            --val_prop {params.val_prop} \
+            --tkg_output_dir {params.tkg_output_dir} \
+            --relations_root {params.relations_root} \
+            {params.exclude_patient_relations} \
+            {params.no_rev}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 11: train complex2 model on each fold
+# ---------------------------------------------------------------------------
+
+rule k11_train_complex2:
+    input:
+        tkg_complete = step_flag("10"),
+        tkg_data = os.path.join(OUT_DIR, CFG.get("step_10", {}).get("tkg_output_dir", "tkge_no_patient"), "processed", "FOLD_{fold}", "Data.pt")
+    output:
+        valid_metrics = os.path.join(OUT_DIR, "complex2", "FOLD_{fold}", "valid_metrics.csv"),
+        test_metrics = os.path.join(OUT_DIR, "complex2", "FOLD_{fold}", "test_metrics.csv"),
+        flag = os.path.join(EXP_ROOT, ".11_FOLD_{fold}_complete")
+    params:
+        script = os.path.join(SCRIPT_DIR, "train_complex2.py"),
+        tkg_output_dir = CFG.get("step_10", {}).get("tkg_output_dir", "tkge_no_patient"),
+        optim = CFG.get("step_11", {}).get("optim", "adan"),
+        wd = CFG.get("step_11", {}).get("wd", 0),
+        channels = CFG.get("step_11", {}).get("channels", 1024),
+        batch_size = CFG.get("step_11", {}).get("batch_size", 10000),
+        n_epochs = CFG.get("step_11", {}).get("n_epochs", 100),
+        num_workers = CFG.get("step_11", {}).get("num_workers", 20),
+        lr = CFG.get("step_11", {}).get("lr", 0.01),
+        dropout = CFG.get("step_11", {}).get("dropout", 0.0),
+        lr_scheduler = "--lr_scheduler" if CFG.get("step_11", {}).get("lr_scheduler", False) else "",
+        verbose = "--verbose" if CFG.get("step_11", {}).get("verbose", False) else "",
+        log_every = CFG.get("step_11", {}).get("log_every", 1),
+        patience = CFG.get("step_11", {}).get("patience", 10),
+        use_cpu = "--use_cpu" if CFG.get("step_11", {}).get("use_cpu", False) else "",
+        target_relation = CFG.get("step_11", {}).get("target_relation", "drug,targets,gene"),
+        target_metric = CFG.get("step_11", {}).get("target_metric", "mrr"),
+        remove_relation_idx = "--remove_relation_idx {}".format(CFG.get("step_11", {}).get("remove_relation_idx")) if CFG.get("step_11", {}).get("remove_relation_idx") is not None else ""
+    shell:
+        """
+        mkdir -p {OUT_DIR}/complex2/FOLD_{wildcards.fold}
+        python {params.script} \
+            --data {OUT_DIR}/{params.tkg_output_dir}/processed/FOLD_{wildcards.fold}/ \
+            --out {OUT_DIR}/complex2/FOLD_{wildcards.fold}/ \
+            --optim {params.optim} \
+            --wd {params.wd} \
+            --channels {params.channels} \
+            --batch_size {params.batch_size} \
+            --n_epochs {params.n_epochs} \
+            --num_workers {params.num_workers} \
+            --lr {params.lr} \
+            --dropout {params.dropout} \
+            {params.lr_scheduler} \
+            {params.verbose} \
+            --log_every {params.log_every} \
+            --patience {params.patience} \
+            {params.use_cpu} \
+            --target_relation {params.target_relation} \
+            --target_metric {params.target_metric} \
+            {params.remove_relation_idx}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 12: train GNN model on each fold
+# ---------------------------------------------------------------------------
+
+rule k12_train_gnn:
+    input:
+        tkg_data = os.path.join(OUT_DIR, CFG.get("step_10", {}).get("tkg_output_dir", "tkge_no_patient"), "processed", "FOLD_{fold}", "Data.pt"),
+        complex2_complete = os.path.join(EXP_ROOT, ".11_FOLD_{fold}_complete")
+    output:
+        valid_metrics = os.path.join(OUT_DIR, "gnn", "FOLD_{fold}", "valid_metrics.csv"),
+        test_metrics = os.path.join(OUT_DIR, "gnn", "FOLD_{fold}", "test_metrics.csv"),
+        flag = os.path.join(EXP_ROOT, ".12_FOLD_{fold}_complete")
+    params:
+        script = os.path.join(SCRIPT_DIR, "train_gnn.py"),
+        tkg_output_dir = CFG.get("step_10", {}).get("tkg_output_dir", "tkge_no_patient"),
+        wd = CFG.get("step_12", {}).get("wd", 0),
+        channels = CFG.get("step_12", {}).get("channels", 8),
+        layers = CFG.get("step_12", {}).get("layers", 5),
+        batch_size = CFG.get("step_12", {}).get("batch_size", 5),
+        n_epochs = CFG.get("step_12", {}).get("n_epochs", 100),
+        num_workers = CFG.get("step_12", {}).get("num_workers", 10),
+        lr = CFG.get("step_12", {}).get("lr", 0.001),
+        dropout = CFG.get("step_12", {}).get("dropout", 0.0),
+        verbose = "--verbose" if CFG.get("step_12", {}).get("verbose", False) else "",
+        nonlin = CFG.get("step_12", {}).get("nonlin", "elu"),
+        heads = CFG.get("step_12", {}).get("heads", 1),
+        bias = "--bias" if CFG.get("step_12", {}).get("bias", False) else "",
+        edge_dim = CFG.get("step_12", {}).get("edge_dim", 2),
+        checkpoint = "--checkpoint" if CFG.get("step_12", {}).get("checkpoint", False) else "",
+        log_every = CFG.get("step_12", {}).get("log_every", 1),
+        residual = "--residual" if CFG.get("step_12", {}).get("residual", False) else "",
+        compile = "--compile" if CFG.get("step_12", {}).get("compile", False) else "",
+        norm = CFG.get("step_12", {}).get("norm", "layer"),
+        patience = CFG.get("step_12", {}).get("patience", 5),
+        conv = CFG.get("step_12", {}).get("conv", "gat"),
+        target_metric = CFG.get("step_12", {}).get("target_metric", "mrr"),
+        target_relation = CFG.get("step_12", {}).get("target_relation", "drug,targets,gene"),
+        heteroA = "--heteroA" if CFG.get("step_12", {}).get("heteroA", False) else "",
+        remove_relation_idx = "--remove_relation_idx {}".format(CFG.get("step_12", {}).get("remove_relation_idx")) if CFG.get("step_12", {}).get("remove_relation_idx") is not None else ""
+    shell:
+        """
+        mkdir -p {OUT_DIR}/gnn/FOLD_{wildcards.fold}
+        python {params.script} \
+            --data {OUT_DIR}/{params.tkg_output_dir}/processed/FOLD_{wildcards.fold}/ \
+            --out {OUT_DIR}/gnn/FOLD_{wildcards.fold}/ \
+            --wd {params.wd} \
+            --channels {params.channels} \
+            --layers {params.layers} \
+            --batch_size {params.batch_size} \
+            --n_epochs {params.n_epochs} \
+            --num_workers {params.num_workers} \
+            --lr {params.lr} \
+            --dropout {params.dropout} \
+            {params.verbose} \
+            --nonlin {params.nonlin} \
+            --heads {params.heads} \
+            {params.bias} \
+            --edge_dim {params.edge_dim} \
+            {params.checkpoint} \
+            --log_every {params.log_every} \
+            {params.residual} \
+            {params.compile} \
+            --norm {params.norm} \
+            --patience {params.patience} \
+            --conv {params.conv} \
+            --target_metric {params.target_metric} \
+            --target_relation {params.target_relation} \
+            {params.heteroA} \
+            {params.remove_relation_idx}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Aggregate rules for training all folds sequentially
+# ---------------------------------------------------------------------------
+
+rule train_all_complex2:
+    input:
+        expand(os.path.join(EXP_ROOT, ".11_FOLD_{fold}_complete"), 
+               fold=range(CFG.get("step_10", {}).get("k_folds", 5)))
+    output:
+        flag = step_flag("11_all")
+    shell:
+        """
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 13: aggregate predictions across folds
+# ---------------------------------------------------------------------------
+
+rule k13_aggregate_predictions:
+    input:
+        # Depend on all folds being trained
+        fold_flags = expand(os.path.join(EXP_ROOT, ".11_FOLD_{fold}_complete"), 
+                           fold=range(CFG.get("step_10", {}).get("k_folds", 5))),
+        # Data.pt from any fold (they should all have the same node mappings)
+        data_pt = os.path.join(OUT_DIR, CFG.get("step_10", {}).get("tkg_output_dir", "tkge_no_patient"), "processed", "FOLD_0", "Data.pt"),
+        # Targetome metadata
+        targetome = os.path.join(OUT_DIR, "meta", "targetome__drug_targets_gene.csv")
+    output:
+        aggregated_preds = os.path.join(OUT_DIR, "complex2", "aggregated_predictions.csv"),
+        summary = os.path.join(OUT_DIR, "complex2", "aggregation_summary.csv"),
+        flag = step_flag("13")
+    params:
+        script = os.path.join(SCRIPT_DIR, "aggregate_fold_predictions.py"),
+        k_folds = CFG.get("step_10", {}).get("k_folds", 5),
+        min_fnr = CFG.get("step_13", {}).get("min_fnr", 0.5),
+        max_fpr = CFG.get("step_13", {}).get("max_fpr", 1.0),
+        n_thresholds = CFG.get("step_13", {}).get("n_thresholds", 250),
+        min_n_folds = CFG.get("step_13", {}).get("min_n_folds", 1),
+        model_dir = CFG.get("step_13", {}).get("model_dir", "complex2")
+    shell:
+        """
+        mkdir -p {OUT_DIR}/{params.model_dir}
+        python {params.script} \
+            --root {OUT_DIR}/{params.model_dir} \
+            --data_path {input.data_pt} \
+            --targetome_path {input.targetome} \
+            --out {OUT_DIR}/{params.model_dir} \
+            --k_folds {params.k_folds} \
+            --min_fnr {params.min_fnr} \
+            --max_fpr {params.max_fpr} \
+            --n_thresholds {params.n_thresholds} \
+            --min_n_folds {params.min_n_folds}
+        touch {output.flag}
+        """
+
+
+# ---------------------------------------------------------------------------
+# Step 14: filter targetome annotations from predictions
+# ---------------------------------------------------------------------------
+
+rule k14_filter_targetome_from_predictions:
+    input:
+        aggregated_preds = rules.k13_aggregate_predictions.output.aggregated_preds
+    output:
+        filtered_preds = os.path.join(OUT_DIR, CFG.get("step_13", {}).get("model_dir", "complex2"), "aggregated_and_filtered_predictions.csv"),
+        flag = step_flag("14")
+    params:
+        script = os.path.join(SCRIPT_DIR, "filter_targetome_from_predictions.py"),
+        targetome_expanded_path = CFG.get("step_14", {}).get("targetome_expanded_path", ""),
+        model_dir = CFG.get("step_13", {}).get("model_dir", "complex2")
+    shell:
+        """
+        python {params.script} \
+            --aggregated_predictions {input.aggregated_preds} \
+            --targetome_path {params.targetome_expanded_path} \
+            --out {OUT_DIR}/{params.model_dir}
+        touch {output.flag}
+        """
+
+

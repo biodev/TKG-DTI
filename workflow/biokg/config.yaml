@@ -1,0 +1,55 @@
+###############################################################################
+# BioKG pipeline configuration for OGB BioKG knowledge graph processing
+#
+# This pipeline processes the OGB BioKG dataset and trains models for
+# drug-target interaction prediction using Complex2 and GNN approaches.
+#
+# Pipeline steps:
+# 1. preprocess_biokg: Download and preprocess the OGB BioKG dataset
+# 2. create_negatives: Generate negative samples for evaluation
+# 3. train_complex2: Train Complex2 model
+# 4. train_gnn: Train GNN model
+###############################################################################
+
+dirs:
+  data_root: "/home/exacloud/gscratch/mcweeney_lab/evans/data/biokg/"
+  out_root: "/home/exacloud/gscratch/mcweeney_lab/evans/outputs_/biokg_workflow"
+  script_dir: "/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/workflow/scripts"
+
+experiment:
+  id: "biokg-01"
+  seed: 0
+
+###############################################################################
+# Step-specific configuration
+###############################################################################
+
+# Step 1: preprocess BioKG dataset (make_biokg.py)
+# No additional parameters needed - the script handles OGB dataset download
+
+# Step 2: create negative samples (create_biokg_negatives.py)
+negative_sampling:
+  target_relation: "drug,drug-protein,protein"  # target relation for negative sampling
+  n_neg_per_pos: 500                            # number of negative samples per positive edge
+  corruption_mode: "both"                       # corruption mode: head, tail, or both
+  seed: 0                                      # random seed for negative sampling
+
+# Step 3: train Complex2 model (train_complex2.py)
+step_03_complex2:
+  optim: "adam"                        # optimizer [adam, adagrad, adan]
+  wd: 0                                # weight decay
+  channels: 512                       # number of hidden channels
+  batch_size: 20000                    # batch size
+  n_epochs: 100                        # number of training epochs
+  num_workers: 10                      # number of data loader workers
+  lr: 1e-2                             # learning rate
+  dropout: 0.0                         # dropout rate
+  lr_scheduler: false                  # whether to use lr scheduler (reduce on plateau)
+  verbose: false                       # verbosity
+  log_every: 1                         # how often to log validation performance during training
+  patience: 5                          # early stopping patience
+  use_cpu: false                       # use cpu instead of gpu
+  target_relation: "drug,drug-protein,protein"  # target relation tuple
+  target_metric: "mrr"                 # metric to use for early stopping [hits@10, mrr, auroc]
+  remove_relation_idx: null            # index of relation to remove from knowledge graph
+  eval_method: "negatives"             # evaluation method: "all" or "negatives"

@@ -9,6 +9,8 @@ import requests
 import csv
 import pandas as pd 
 
+
+
 def get_protein_sequence_uniprot(gene_symbol, email=''):
     """Retrieve the canonical protein sequence for a given gene symbol from UniProt."""
 
