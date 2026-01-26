@@ -30,7 +30,7 @@ pip install -e .
 There are a few helper functions that we borrow from the GSNN [repo](https://github.com/nathanieljevans/GSNN), in the future we will remove this dependency. To install GSNN: 
 
 ```bash 
-$ pip git+https://github.com/nathanieljevans/GSNN 
+$ pip install git+https://github.com/nathanieljevans/GSNN 
 ```
 
 ## Quick Start
