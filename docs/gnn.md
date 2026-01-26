@@ -1,5 +1,6 @@
+> **Note:** This documentation was reviewed and edited with assistance from an LLM. Please verify critical details against the source code.
 
-# GNN architecture overview 
+# GNN Architecture Overview 
 
 To perform interpretable and convenient drug-target interaction predictions using knowledge graph, we have implemented a graph neural network to make predictions, however, we use an unconventional data encoding to mitigate the need to do drug-protein embedding comparisons. 
 

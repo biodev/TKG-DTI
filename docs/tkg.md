@@ -1,73 +1,81 @@
+> **Note:** This documentation was reviewed and edited with assistance from an LLM. Please verify critical details against the source code.
+
 # Targetome Knowledge Graph
 
-## Summary proposal 
+> **Important:** This document represents the original design proposal. Not all relation types listed below were implemented in the final system. See [tkgdti_methods.md](tkgdti_methods.md) for documentation of the implemented relations.
 
-Construct a knowledge graph using the cancer targetome and a number of additional relation types described in the table below. Some relations described below may be exlcuded depending on practical utility, ability to match identifiers, and the rationale inclusion balanced with the difficulty of inclusion. We will then perform hyperoptimizaton to select relations that maximize performance on a hold-out validation set (predicting targetome level 3 DTIs). The outcome of this project will be a set of DTIs that have similar attributes to the cancer targetome level 3 DTIs. We will initially focus on drugs used in the BeatAML project, and potentially expand to a wider selection depending on performance and future goals. 
+## Summary (Original Proposal)
 
-## Details: 
+Construct a knowledge graph using the cancer targetome and a number of additional relation types described in the table below. Some relations described below may be excluded depending on practical utility, ability to match identifiers, and the rationale inclusion balanced with the difficulty of inclusion. We will then perform hyperoptimization to select relations that maximize performance on a hold-out validation set (predicting targetome level 3 DTIs). The outcome of this project will be a set of DTIs that have similar attributes to the cancer targetome level 3 DTIs. We will initially focus on drugs used in the BeatAML project, and potentially expand to a wider selection depending on performance and future goals. 
 
----
+## Proposed Relation Types
 
-| Source   | Relation             | Target                | Undirected? | Data Source(s)                            |
-|----------|----------------------|-----------------------|-------------|-------------------------------------------|
-| Drug     | targets              | Protein               | No          | Targetome \[1\]; STITCH \[2\]             |
-| Drug     | similar-to           | Drug                  | Yes         | DrugBank \[3\]; PubChem \[4\]             |
-| Protein  | similar-to           | Protein               | Yes         | UniProt \[5\]; BLAST \[6\]                |
-| Protein  | interacts-with       | Protein               | Yes         | OmniPath \[7\]; STRING \[8\]              |
-| Protein  | regulates            | Protein               | No          | OmniPath \[7\]; RegNetwork \[9\]          |
-| Drug     | associated-with      | Disease               | Yes         | DrugBank \[3\]; ClinicalTrials.gov \[10\] |
-| Protein  | associated-with      | Disease               | Yes         | DisGeNET \[11\]; GWAS Catalog \[12\]      |
-| Protein  | located-in           | GO Cellular Component | No          | Gene Ontology \[13\]                      |
-| Protein  | has-function         | GO Molecular Function | No          | Gene Ontology \[13\]                      |
-| Protein  | involved-in          | GO Biological Process | No          | Gene Ontology \[13\]                      |
-| Drug     | causes-side-effect   | Symptom               | Yes         | SIDER \[14\]; OFFSIDES \[15\]             |
-| Disease  | has-symptom          | Symptom               | Yes         | Human Phenotype Ontology \[16\]           |
-| Drug     | metabolized-by       | Protein               | No          | PharmGKB \[17\]; DrugBank \[3\]           |
-| Protein  | part-of              | Pathway               | No          | Reactome \[18\]; KEGG \[19\]              |
-| Drug     | inhibits             | Protein               | No          | ChEMBL \[20\]; BindingDB \[21\]           |
-| Protein  | binds-to             | Protein               | Yes         | BioGRID \[22\]; IntAct \[23\]             |
-| Drug     | transported-by       | Protein               | No          | TCDB \[24\]                               |
-| cell-line| is-sensitive         | Drug                  | Yes         | CCLE, CTRP, NCI60                         | 
-| cell-line| has-high-expression  | Protein               | Yes         | CCLE                                      |
-| cell-line| has-low-expression   | Protein               | Yes         | CCLE                                      |
+The table below shows originally proposed relation types. **Implemented relations are marked with ✓**.
 
 ---
 
-**Protein/drug similarity**
-
-Previous studies that have looked at simple structural similarity metrics (taniomoto coeficient) showed poor predictive value for DTI prediction (...still trying to find the paper I'm referring to for this claim), so I would suggest that we use a deep learning method for drug embedding (like Node2vec, CHEMBERTa, etc). This can also be done with protein amino acid sequence, or with more complicated approaches using protein folding/structure. 
+| Source   | Relation             | Target                | Undirected? | Data Source(s)                            | Implemented |
+|----------|----------------------|-----------------------|-------------|-------------------------------------------|-------------|
+| Drug     | targets              | Protein               | No          | Targetome \[1\]                           | ✓           |
+| Drug     | similar-to           | Drug                  | Yes         | ChemBERTa embeddings                      | ✓           |
+| Protein  | similar-to           | Protein               | Yes         | ProtBert/ESM2 embeddings                  | ✓           |
+| Protein  | interacts-with       | Protein               | Yes         | OmniPath \[7\]                            | ✓           |
+| Protein  | regulates            | Protein               | No          | OmniPath \[7\]                            | ✓           |
+| Drug     | associated-with      | Disease               | Yes         | CTD                                       | ✓           |
+| Protein  | associated-with      | Disease               | Yes         | CTD                                       | ✓           |
+| Protein  | part-of              | Pathway               | No          | CTD                                       | ✓           |
+| Drug     | perturbs-expression  | Protein               | No          | LINCS L1000                               | ✓           |
+| Drug     | predicted-binding    | Protein               | No          | jGlaser model                             | ✓           |
+| Protein  | located-in           | GO Cellular Component | No          | Gene Ontology \[13\]                      |             |
+| Protein  | has-function         | GO Molecular Function | No          | Gene Ontology \[13\]                      |             |
+| Protein  | involved-in          | GO Biological Process | No          | Gene Ontology \[13\]                      |             |
+| Drug     | causes-side-effect   | Symptom               | Yes         | SIDER \[14\]; OFFSIDES \[15\]             |             |
+| Disease  | has-symptom          | Symptom               | Yes         | Human Phenotype Ontology \[16\]           |             |
+| Drug     | metabolized-by       | Protein               | No          | PharmGKB \[17\]; DrugBank \[3\]           |             |
+| Drug     | inhibits             | Protein               | No          | ChEMBL \[20\]; BindingDB \[21\]           |             |
+| Protein  | binds-to             | Protein               | Yes         | BioGRID \[22\]; IntAct \[23\]             |             |
+| Drug     | transported-by       | Protein               | No          | TCDB \[24\]                               |             |
+| cell-line| is-sensitive         | Drug                  | Yes         | CCLE, CTRP, NCI60                         |             |
+| cell-line| has-high-expression  | Protein               | Yes         | CCLE                                      |             |
+| cell-line| has-low-expression   | Protein               | Yes         | CCLE                                      |             |
 
 ---
 
-**Drug sensitivity and genomic features** 
+**Protein/drug similarity (Implemented)**
 
-This is an idea I've been playing with for a few months, although I was previously considering it for sensitivty predicition rather than drug-target prediction. The general idea is to create paths from drug to protein, via known genomic links and drug sensitivities. Rationale being, genomic markers/patterns that are causal of sensitivity are likely to have local impact from drug-targets. I am not sure if the added complexity (number of edges) will be justified by the predictive value. 
-
-e.g., path: "drug", "sensitivity-in", "cell-line", "overexpresses" "protein" (and potentially additional PPI interactions to local neighborhood)
+Previous studies that have looked at simple structural similarity metrics (Tanimoto coefficient) showed limited predictive value for DTI prediction. The final implementation uses deep learning embeddings: ChemBERTa for drug SMILES and ProtBert/ESM2 for protein amino acid sequences. Similarity edges are created by thresholding cosine similarity between embeddings. 
 
 ---
 
-**Hyperoptimization of KG-relations**
+**Drug sensitivity and genomic features (Not Implemented)**
 
-Understanding which of the relationships above are useful to DTI prediction and which are not is a somewhat challenging task, and while we have rationale for almost all of these, they may not be practically useful for DTI prediction. I propose that we use a hyper-optimization procedure to select an optimal subset of relations that maximizes performance on a validation subset. This can be done with bayesian optimization or reinforcement learning. Note: this will probably only be actionable with Complex2 and will potentially require days/weeks of compute time. 
+This was a proposed idea to create paths from drug to protein via known genomic links and drug sensitivities. The rationale was that genomic markers/patterns causal of sensitivity are likely to have local impact from drug-targets. This approach was not included in the final implementation.
 
----
-
-**Use of multiple DTI resources** 
-
-The primary pupose of this KG is to predict high-confidence DTI interactions using the cancer targetome, however, auxilliary resources such as STITCH, which includes predicted DTIs may be a useful relation type for prediction of a subset of high-quality DTIs.
+e.g., proposed path: "drug", "sensitivity-in", "cell-line", "overexpresses" "protein"
 
 ---
 
-**Protein/drug localization** 
+**Hyperoptimization of KG-relations (Partially Implemented)**
 
-Knowledge of where a protein is in the cell may help narrow the selection of functional drug targets, for instance, a cytoplasmic drug is unlikely to bind to proteins in the nucleus (or even if it does have ligand binding, is not likely to have a functional effect). Unfortunately, to my knowledge we do not have good resources that catalog drug-localization, however, the TCDB resource may provide some of this information (need to investigate further). 
+Understanding which relationships are useful for DTI prediction is challenging. The final implementation includes a relation ablation capability (`remove_relation_idx` parameter) to systematically test which relations contribute to predictive performance. Full Bayesian optimization across relation subsets was not implemented. 
+
+---
+
+**Use of multiple DTI resources (Partially Implemented)**
+
+The primary purpose of this KG is to predict high-confidence DTI interactions using the cancer targetome. The final implementation includes predicted binding affinity edges from a trained model (jGlaser dataset), which provides auxiliary DTI-like information to augment the knowledge graph.
+
+---
+
+**Protein/drug localization (Not Implemented)**
+
+Knowledge of where a protein is in the cell may help narrow the selection of functional drug targets. This feature was not included in the final implementation due to lack of comprehensive drug localization data. 
 
 ---
 
 **References:**
 
-\[1\] **Targetome**: ...
+\[1\] **Targetome**: Evans NJ, et al. The Cancer Targetome. [https://github.com/Targetome](https://github.com/Targetome)
 
 \[2\] **STITCH**: Szklarczyk D, et al. STITCH 5: augmenting protein–chemical interaction networks with tissue and affinity data. *Nucleic Acids Research*, 2016;44(D1):D380–D384. [doi:10.1093/nar/gkv1277](https://doi.org/10.1093/nar/gkv1277)
 

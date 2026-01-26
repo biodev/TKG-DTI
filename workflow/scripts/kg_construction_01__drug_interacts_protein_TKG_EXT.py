@@ -30,7 +30,7 @@ def load_tge(args):
     tge_meta = tge_meta[['inchi_key', 'drug_name', 'molecule_type', 'clinical_phase', 'inchi']].rename({'drug_name':'inhibitor'}, axis=1).drop_duplicates()
 
     tge = pd.read_csv(f'{args.data}/targetome_extended-01-23-25.csv')
-    tge = tge.assign(targetome_adj_tier='TIER_1')
+    tge = tge.assign(targetome_adj_tier='TIER_1') # Future focused, if we implement multiple tiers 
 
     # add drug name 
     tge = tge.merge(tge_meta, on='inchi_key', how='inner')
@@ -43,7 +43,7 @@ def load_tge(args):
     tge = tge.drop_duplicates()
 
     drug_names = tge_meta[lambda x: (x.molecule_type == 'Small molecule') 
-                                & (x.clinical_phase != 'preclinical compounds with bioactivity data')].inhibitor.unique().tolist()
+                                  & (x.clinical_phase != 'preclinical compounds with bioactivity data')].inhibitor.unique().tolist()
 
     tge = tge[lambda x: x.inhibitor.isin(drug_names)] # filter to beataml drugs 
 

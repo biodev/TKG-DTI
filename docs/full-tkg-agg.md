@@ -1,3 +1,5 @@
+> **Note:** This documentation was reviewed and edited with assistance from an LLM. Please verify critical details against the source code.
+
 # Data Dictionary 
 
 
@@ -37,7 +39,7 @@
 
 Predictions are aggregated across 10 cross-validation folds:
 
-1. **Per-fold processing**: For each fold, load predictions and estimate FNR/FPR at each score using Gaussian Process regression fitted on threshold-metric curves.
+1. **Per-fold processing**: For each fold, load predictions and estimate FNR/FPR at each score using linear interpolation on threshold-metric curves.
 2. **Inclusion filtering**: Retain only `negatives` (candidate DTIs) meeting criteria: `fnr_est <= max_fnr` AND `fpr_est >= min_fpr`
 3. **Cross-fold aggregation**: Group by (drug, protein) and collect scores/metrics as lists from all folds where the pair passed filtering.
 4. **Summary statistics**: Compute means and count how many folds each pair appeared in.
