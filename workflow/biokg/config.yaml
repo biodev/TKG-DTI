@@ -12,9 +12,9 @@
 ###############################################################################
 
 dirs:
-  data_root: "/home/exacloud/gscratch/mcweeney_lab/evans/data/biokg/"
-  out_root: "/home/exacloud/gscratch/mcweeney_lab/evans/outputs_/biokg_workflow"
-  script_dir: "/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/workflow/scripts"
+  data_root: "/path/to/data/biokg/"              # UPDATE: path to BioKG data
+  out_root:  "/path/to/output/"                  # UPDATE: path for workflow outputs
+  script_dir: "/path/to/TKG-DTI/workflow/scripts"  # UPDATE: absolute path to workflow scripts
 
 experiment:
   id: "biokg-01"

@@ -12,9 +12,9 @@
 ###############################################################################
 
 dirs:
-  data_root: "/home/exacloud/gscratch/mcweeney_lab/evans/data/"     # e.g., /home/.../TKG-DTI/data
-  out_root:  "/home/exacloud/gscratch/mcweeney_lab/evans/outputs_/TKGDTI_workflow"     # e.g., /home/.../TKG-DTI/runs
-  script_dir: "/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/workflow/scripts"    # absolute path to workflow scripts
+  data_root: "/path/to/data/"                    # UPDATE: path to downloaded data files
+  out_root:  "/path/to/output/"                  # UPDATE: path for workflow outputs
+  script_dir: "/path/to/TKG-DTI/workflow/scripts"  # UPDATE: absolute path to workflow scripts
 
 experiment:
   id: "full-tkg-02" # lower nM threshold
@@ -159,6 +159,6 @@ step_13:
 
 # 14: filter_targetome_from_predictions.py
 step_14:
-  targetome_expanded_path: "/home/exacloud/gscratch/mcweeney_lab/evans/data/targetome_extended-01-23-25.csv"  # path to targetome_expanded CSV
+  targetome_expanded_path: "/path/to/data/targetome_extended-01-23-25.csv"  # UPDATE: path to targetome_expanded CSV
 
 

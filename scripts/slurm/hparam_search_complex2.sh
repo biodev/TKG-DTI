@@ -52,7 +52,7 @@ sbatch <<EOF
 
 source ~/.zshrc
 conda activate tkgdti
-cd /home/exacloud/gscratch/NGSdev/evans/TKG-DTI/scripts/
+cd /path/to/TKG-DTI/scripts/  # UPDATE: set to your TKG-DTI path
 python train_complex2.py --data $DATA --out $OUT --num_workers 10 --lr $lr --channels $c --batch_size $batch --wd $wd --n_epochs $NEPOCHS --patience 5 --log_every 1 --target_relations 5
 EOF
 done

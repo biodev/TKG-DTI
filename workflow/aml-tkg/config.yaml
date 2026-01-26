@@ -12,9 +12,9 @@
 ###############################################################################
 
 dirs:
-  data_root: "/home/exacloud/gscratch/mcweeney_lab/evans/data/"     # e.g., /home/.../TKG-DTI/data
-  out_root:  "/home/exacloud/gscratch/mcweeney_lab/evans/outputs_/TKGDTI_workflow"     # e.g., /home/.../TKG-DTI/runs
-  script_dir: "/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/workflow/scripts"    # absolute path to workflow scripts
+  data_root: "/path/to/data/"                    # UPDATE: path to downloaded data files
+  out_root:  "/path/to/output/"                  # UPDATE: path for workflow outputs
+  script_dir: "/path/to/TKG-DTI/workflow/scripts"  # UPDATE: absolute path to workflow scripts
 
 experiment:
   id: "aml-tkg-01"

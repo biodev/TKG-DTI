@@ -16,7 +16,7 @@ sbatch <<EOF
 #SBATCH --error=$logs/log.%j.err
 
 source ~/.zshrc
-cd /home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/workflow/aml-tkg/
+cd /path/to/TKG-DTI/workflow/aml-tkg/  # UPDATE: set to your TKG-DTI path
 conda activate tkgdti
 snakemake --unlock
 snakemake -j 1

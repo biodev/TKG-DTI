@@ -11,9 +11,9 @@
 ###############################################################################
 
 dirs:
-  data_root: "/home/exacloud/gscratch/mcweeney_lab/evans/data/HeteroA/"
-  out_root: "/home/exacloud/gscratch/mcweeney_lab/evans/outputs_/hetero_a_workflow"
-  script_dir: "/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/workflow/scripts"
+  data_root: "/path/to/data/HeteroA/"            # UPDATE: path to HeteroA data
+  out_root:  "/path/to/output/"                  # UPDATE: path for workflow outputs
+  script_dir: "/path/to/TKG-DTI/workflow/scripts"  # UPDATE: absolute path to workflow scripts
 
 experiment:
   id: "heteroa-01"

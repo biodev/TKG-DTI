@@ -6,9 +6,9 @@
 
 # configs
 
-## data args
-DATA=/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/data/tkg/processed/FOLD_0/
-OUT=/home/exacloud/gscratch/mcweeney_lab/evans/TKG-DTI/output/hparam_tuning/tkg/FOLD_0/complex2/
+## data args - UPDATE THESE PATHS
+DATA=/path/to/TKG-DTI/data/tkg/processed/FOLD_0/
+OUT=/path/to/TKG-DTI/output/hparam_tuning/tkg/FOLD_0/complex2/
 LOGDIR=$OUT/logs/
 
 N=10 # compute budget (number of runs)
