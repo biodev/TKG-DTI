@@ -1,5 +1,7 @@
 # TKG-DTI: Targetome Knowledge Graph for Drug-Target Interaction Prediction
 
+[![DOI](https://zenodo.org/badge/891072028.svg)](https://doi.org/10.5281/zenodo.18809293)
+
 TKG-DTI is a knowledge graph-based framework for predicting high-confidence drug-target interactions (DTIs) in cancer therapeutics. The system integrates multiple biomedical data sources into a heterogeneous knowledge graph and uses graph-based machine learning models (ComplEx² and Path-GNN) to predict novel DTIs.
 
 ## Features
