@@ -42,6 +42,8 @@ def load_tge(args):
 
     tge = tge.drop_duplicates()
 
+    # BUG (3/18/26): Some drug names have multiple inchikeys, which can lead to selecting inchikeys that do not fit the criteria (below). 
+    # TODO: filter by inchikeys instead of drug names
     drug_names = tge_meta[lambda x: (x.molecule_type == 'Small molecule') 
                                   & (x.clinical_phase != 'preclinical compounds with bioactivity data')].inhibitor.unique().tolist()
 

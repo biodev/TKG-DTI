@@ -9,3 +9,4 @@
 **/predictions.csv
 *.snakemake
 **/pypath_log/
+_dev.ipynb
