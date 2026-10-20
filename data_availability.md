@@ -1,4 +1,4 @@
-> **Note:** This documentation was drafted with assistance from a large language model. File names, URLs, sizes, and license summaries were checked against primary sources and this repository’s code in August 2026. The Expanded Cancer Targetome Figshare record was rechecked on 20 October 2026. Confirm legal terms on the source sites before commercial use or redistribution.
+> **Note:** This documentation was drafted with assistance from a large language model. File names, URLs, sizes, and license summaries were checked against primary sources and this repository’s code in August 2026. Confirm legal terms on the source sites before commercial use or redistribution.
 
 # Data Availability
 
@@ -8,12 +8,9 @@ This document lists the **external** data and models needed to run the TKG-DTI k
 
 ## What this project releases
 
-This repository releases **software** (GNU GPL v3.0; see `LICENSE.md` and [https://doi.org/10.5281/zenodo.18809293](https://doi.org/10.5281/zenodo.18809293)).
+This repository releases **software** (GNU GPL v3.0; see `LICENSE.md` and [https://github.com/biodev/TKG-DTI](https://github.com/biodev/TKG-DTI)).
 
-The companion data product is the Figshare dataset **[Targetome-Expanded Release](https://figshare.com/articles/dataset/Targetome-Expanded_Release/34367808)** ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); [https://doi.org/10.6084/m9.figshare.34367808.v1](https://doi.org/10.6084/m9.figshare.34367808.v1)). That record contains:
-
-1. Curated Expanded Cancer Targetome tables (DTIs, drug metadata, synonyms).
-2. **A filtered subset of ComplEx² drug–target predictions** (`TargetomeKG_Complex2_DTI_preds_03-19-2026.csv.gz`) — aggregated, thresholded candidate pairs, not the full pairwise score matrix.
+The companion data product is the Figshare dataset **[Targetome-Expanded Release](https://figshare.com/articles/dataset/Targetome-Expanded_Release/34367808)** ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/); [https://doi.org/10.6084/m9.figshare.34367808.v1](https://doi.org/10.6084/m9.figshare.34367808.v1)). That record contains a filtered subset of ComplEx² drug–target predictions (`TargetomeKG_Complex2_DTI_preds_03-19-2026.csv.gz`) — aggregated, thresholded candidate pairs, not the full pairwise score matrix.
 
 **This project does not release:**
 
@@ -25,23 +22,21 @@ Sources other than the companion Targetome tables are used **only to train or ev
 
 ---
 
-
-
 ## Workflows and configuration
 
 For `workflow/full-tkg/` and `workflow/aml-tkg/`, put the files in the directory-structure section into one folder and set `dirs.data_root` in that workflow’s `config.yaml`. Also set `dirs.out_root` and `dirs.script_dir`. `workflow/full-tkg/` additionally uses `step_14.targetome_expanded_path` (path to a Targetome DTI table used only to drop already-annotated pairs from predictions).
 
 `workflow/biokg/` and `workflow/hetero-a/` are separate benchmark pipelines. They do not need the Targetome/CTD/LINCS/UniProt folder.
 
-**Helper script:** `scripts/get_tkg_raw_files.sh` downloads CTD, the UniProt proteome FASTA, `beataml_drug_families.xlsx`, and extra BeatAML `*_dbgap.txt` tables that **these workflows do not read**. Edit `ROOT` before running. It does **not** download Targetome or LINCS. Download the Targetome tables with `rebuild_tge.py` (section 1).
+**Helper script:** `scripts/get_tkg_raw_files.sh` downloads CTD, the UniProt proteome FASTA, and `beataml_drug_families.xlsx`. Edit `ROOT` before running. It does **not** download Targetome or LINCS. Download the January 2025 Targetome tables from Figshare (section 1).
 
 **Fetched at runtime (network required on first use):** OmniPath; PubChem name resolution; UniProt ID mapping via GSNN helpers; HuggingFace checkpoints and the jGlaser dataset; OGB BioKG and the DTINet tarball in their workflows.
 
-Both `full-tkg` and `aml-tkg` restrict the drug universe to inhibitors in [beataml_drug_families.xlsx](https://github.com/biodev/beataml2.0_data/raw/main/beataml_drug_families.xlsx).
+`aml-tkg` step 01 restricts the drug universe to inhibitors in [beataml_drug_families.xlsx](https://github.com/biodev/beataml2.0_data/raw/main/beataml_drug_families.xlsx). `full-tkg` step 01 does not read that workbook. It keeps Targetome drugs with `molecule_type` `Small molecule` whose `clinical_phase` is not `preclinical compounds with bioactivity data`.
+
+To reproduce our workflow, download the 01-23-25 Targetome-Expanded snapshot data from [https://figshare.com/s/c207e1c7fabbcdacbf6d](https://figshare.com/s/c207e1c7fabbcdacbf6d). This is the pre-release version that the Complex2 model was trained on.  
 
 ---
-
-
 
 ## Summary
 
@@ -67,13 +62,9 @@ Sizes below were recorded on 28 August 2026. CTD and UniProt “current” files
 | DTINet HeteroA                                   | [data.tar.gz](https://github.com/luoyunan/PyDTINet/raw/main/data.tar.gz)                                                                                                                                                                                                                                                                                                                                                                                            | ~8.7 MB                              | DTINet: GPL-3.0; sources vary (DrugBank is NC)                                                                                       | No — `workflow/hetero-a/` only                                        |
 
 
-
-
 Budget **~40 GB** for these inputs plus HuggingFace caches, and additional space for workflow outputs. The LINCS GCTX dominates.
 
 ---
-
-
 
 ## 1. Expanded Cancer Targetome
 
@@ -96,45 +87,26 @@ Budget **~40 GB** for these inputs plus HuggingFace caches, and additional space
 - `data_dictionary.md` (13,566 bytes)
 - `LICENSE.txt` (20,139 bytes)
 
-**Files this pipeline reads** (names hard-coded in `kg_construction_01__drug_interacts_protein.py`):
+**This pipeline uses the pre-release version of targetome expanded** (names hard-coded in `kg_construction_01__drug_interacts_protein.py` and `kg_construction_01__drug_interacts_protein_TKG_EXT.py`). Download both from the [Targetome-expanded version for TKG-DTI training](https://figshare.com/s/c207e1c7fabbcdacbf6d) Figshare record and copy them into `dirs.data_root`:
 
-- `targetome_extended-01-23-25.csv`
-- `targetome_extended_drugs-01-23-25.csv`
+- `targetome_extended-01-23-25.csv` — DTI table (124,025,981 bytes)
+- `targetome_extended_drugs-01-23-25.csv` — drug metadata (220,513,384 bytes)
 
-Those names refer to a January 2025 CSV snapshot, which was used for ComplEx² training. The Figshare tables add columns, include high-confidence predicted interactions, and update the aggregated drug–target records. `rebuild_tge.py` downloads the two Figshare tables this pipeline needs and writes the filenames above into `--out` (cache: `<out>/_figshare_cache`).
+These are the January 2025 CSV snapshot used for ComplEx² training. The March 2026 tables on the same record (`targetome_expanded_03-26-26.tsv.gz` and `targetome_expanded_drugs_03-26-26.tsv.gz`) add columns, include high-confidence predicted interactions, and update the aggregated drug–target records. Step 01 of this repo pipeline does not read those files.
 
-Default (no `--bit-identical`) is for retraining on the current release. Predicted DTI rows are dropped (`assay_type == Predicted` or `evidence_level == 0`). Every other released assay row is kept, including interactions added after January 2025, and the DTI file is written with the eight columns step 01 reads. Every released drug row is kept, with all fifteen released drug columns. Drug names are not rewritten to the January 2025 strings.
+Both step 01 scripts assign **every** January DTI row `targetome_adj_tier='TIER_1'`. `aml-tkg` then keeps drugs whose names appear in BeatAML `drug_gene`. `full-tkg` (`kg_construction_01__drug_interacts_protein_TKG_EXT.py`) keeps drugs with `molecule_type` `Small molecule` whose `clinical_phase` is not `preclinical compounds with bioactivity data`. Assay filters come from `config.yaml` (`assay_types`, `max_assay_value`, `TIERS`).
 
-```bash
-python rebuild_tge.py --out ./path/to/data/dir/
-```
+**License:** The Figshare item is [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (attribution required; no ShareAlike term on the item).
 
-`--bit-identical 01-23-25` rebuilds the January 2025 training files byte for byte, including the January drug names and the four dropped drug columns (`drugbank_status`, `drugbank_type`, `iuphar_type`, `iuphar_status`). Filtering the Figshare tables alone cannot do that: some January rows were removed and some cells changed. The patch is not in this repository. Download `patch_01-23-25.zip` from the [Targetome-Expanded Release](https://figshare.com/articles/dataset/Targetome-Expanded_Release/34367808) Figshare record, unzip it, and pass the resulting directory as `--patch_path`:
+**Citation:** Bottomly, Daniel; Evans, Nathaniel; McWeeney, Shannon (2026). Targetome-Expanded Release. figshare. Dataset. [https://doi.org/10.6084/m9.figshare.34367808.v1](https://doi.org/10.6084/m9.figshare.34367808.v1).
 
-```bash
-unzip patch_01-23-25.zip
-python rebuild_tge.py --out ./path/to/data/dir/ --bit-identical 01-23-25 --patch_path ./patch_01-23-25
-```
-
-`patch_01-23-25/` contains the row index into the March tables and the January lines those tables cannot regenerate.
-
-Copy the two CSV files into `dirs.data_root`.
-
-Step 01 assigns **every** Expanded Targetome DTI row `targetome_adj_tier='TIER_1'` (the public tables use `evidence_level` 0–III; that field is not read). It then keeps only drugs whose names appear in BeatAML `drug_gene`. Assay filters come from `config.yaml` (`assay_types`, `max_assay_value`, `TIERS`).
-
-**License:** The Figshare item is [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) (attribution required; no ShareAlike term on the item). The `LICENSE.txt` deposited with version 1 is still the CC BY-SA 4.0 legal text; cite the item license above. The tables aggregate records from primary resources (see `data_dictionary.md` on the Figshare record, `database` column); those sources keep their own terms.
-
-**Citation:** Bottomly, D., Evans, N. & McWeeney, S. K. Expanding the set of high evidence drug-target interactions in the Cancer Targetome. Submitted. Dataset: Bottomly, D., Evans, N. & McWeeney, S. (2026). Targetome-Expanded Release. figshare. [https://doi.org/10.6084/m9.figshare.34367808.v1](https://doi.org/10.6084/m9.figshare.34367808.v1).
-
-**Used in:** `kg_construction_01__drug_interacts_protein.py`. `filter_targetome_from_predictions.py` (`full-tkg` step 14) reads a DTI table path from `step_14.targetome_expanded_path`.
+**Used in:** `kg_construction_01__drug_interacts_protein.py` (`aml-tkg`) and `kg_construction_01__drug_interacts_protein_TKG_EXT.py` (`full-tkg`). `filter_targetome_from_predictions.py` (`full-tkg` step 14) reads a DTI table path from `step_14.targetome_expanded_path`.
 
 ---
 
+## 2. BeatAML drug families (required by `aml-tkg` step 01)
 
-
-## 2. BeatAML drug families (required by the construction scripts)
-
-**Description:** Drug–gene mappings used as the inhibitor name set and as additional Targetome-tier annotations. Step 01 always loads this workbook and intersects Expanded Targetome drugs with its `inhibitor` names.
+**Description:** Drug–gene mappings used by `aml-tkg` step 01 as the inhibitor name set and as additional Targetome-tier annotations. That script loads this workbook and intersects Expanded Targetome drugs with its `inhibitor` names. `full-tkg` step 01 does not open this file.
 
 **This project redistributes:** No.
 
@@ -152,15 +124,9 @@ https://github.com/biodev/beataml2.0_data/raw/main/beataml_drug_families.xlsx
 
 **Citation:** Bottomly et al., *Cancer Cell* 40:850–864.e9 (2022). doi:[10.1016/j.ccell.2022.07.002](https://doi.org/10.1016/j.ccell.2022.07.002). Original Cancer Targetome: Blucher et al., *Trends Pharmacol. Sci.* 38:1085–1099 (2017). doi:[10.1016/j.tips.2017.08.006](https://doi.org/10.1016/j.tips.2017.08.006).
 
-**Used in:** `kg_construction_01__drug_interacts_protein.py`
-
-### Extra BeatAML files (not used)
-
-The helper script also fetches inhibitor-response, mutation, and expression `*_dbgap.txt` files. `kg_construction_10_make_tkg.py` can drop `dbgap_subject` relations; `full-tkg` and `aml-tkg` set `exclude_patient_relations: true`. Those extra files are **not** inputs to the current workflows.
+**Used in:** `kg_construction_01__drug_interacts_protein.py` (`workflow/aml-tkg` step 01).
 
 ---
-
-
 
 ## 3. Comparative Toxicogenomics Database (CTD)
 
@@ -197,8 +163,6 @@ Gunzip after download. Files start with `#` comments; the scripts use `pandas.re
 
 ---
 
-
-
 ## Reactome (pathway membership)
 
 **Description:** Gene–pathway membership edges for the knowledge graph (`gene → isin_fwd → pathway` and the reverse). This is a **separate** use of Reactome from the incidental `Reactome_`* tags inside the OmniPath PPI pull.
@@ -219,8 +183,6 @@ Gunzip after download. Files start with `#` comments; the scripts use `pandas.re
 **Used in:** `kg_construction_06__protein_isin_pathway.py`
 
 ---
-
-
 
 ## 4. LINCS L1000 / Connectivity Map 2020 (compound treatments)
 
@@ -261,8 +223,6 @@ That bucket is not an archival repository and may disappear. NIH-funded L1000 da
 
 ---
 
-
-
 ## 5. UniProt human reference proteome
 
 **Description:** Amino-acid sequences used to embed proteins that appear in the graph.
@@ -286,8 +246,6 @@ https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/refe
 **Used in:** `kg_construction_08a__embed_amino_acids.py`; ID mapping in `kg_construction_01__drug_interacts_protein.py`
 
 ---
-
-
 
 ## 6. OmniPath
 
@@ -355,8 +313,6 @@ These are the licenses that, on pypath’s mapping, are **not** `purpose: commer
 | TRIP                           | 136          | CC BY-NC-SA 3.0         | academic         | NC + share-alike                                                               |
 | Kirouac2010                    | 128          | CC BY-NC-ND 3.0         | academic         | NC + no derivatives                                                            |
 | PDZBase                        | 101          | Unspecified NC-SA       | academic         | Placeholder                                                                    |
-
-
 
 
 ### All primary resources in this snapshot
@@ -440,20 +396,9 @@ Licenses and “pypath purpose” below are **OmniPath/pypath’s recorded class
 | DeathDomain                 | 6            | NAR Open Access         | commercial                  |
 
 
-Notes on a few labels:
-
-- **NAR Open Access:** pypath treats Nucleic Acids Research database-issue resources as usable commercially (“freely usable”). That is OmniPath’s rule of thumb, not a CC license on every such database.
-- **KEGG-MEDICUS:** OmniPath records **CC BY-SA 4.0** for this MEDICUS subset. That is not the same as the general KEGG academic/FTP license. This query does not use the classic `KEGG` resource (pypath files that under `pathway_noref`, without literature references).
-- **Unspecified NC-SA:** not a real SPDX license. OmniPath uses it when terms were unclear or they only have permission to redistribute.
-- **GPLv3 / LGPLv3 / Artistic / DSL** on interaction databases are the licenses OmniPath attached (often the project’s software license). Copyleft/share-alike may still matter if you redistribute a derived graph.
-
-
-
 **Used in:** `kg_construction_05__protein_interacts_protein.py`
 
 ---
-
-
 
 ## 7. PubChem
 
@@ -473,8 +418,6 @@ Notes on a few labels:
 **Used in:** `kg_construction_01__drug_interacts_protein.py`, `kg_construction_03__drug_associates_disease.py`
 
 ---
-
-
 
 ## 8. jGlaser binding-affinity dataset
 
@@ -508,8 +451,6 @@ Step 09a drops pairs that match known Targetome SMILES–sequence DTIs.
 **Used in:** `kg_construction_09a__binding_affinity_make.py` through `kg_construction_09d__predicted_binding_affinity.py`
 
 ---
-
-
 
 ## Pre-trained models (HuggingFace)
 
@@ -565,11 +506,7 @@ Preprint: bioRxiv 10.1101/2022.07.20.500902. Weights archive: [https://doi.org/1
 
 ---
 
-
-
 ## Benchmark workflows (not used by `full-tkg` / `aml-tkg`)
-
-
 
 ### 9. OGB BioKG (`workflow/biokg/`)
 
@@ -595,8 +532,6 @@ DTINet is **GPL-3.0**; PyDTINet is **MIT**. Source databases include DrugBank (*
 
 ---
 
-
-
 ## Directory layout (`full-tkg` / `aml-tkg`)
 
 ```
@@ -618,8 +553,6 @@ Set `dirs.data_root` to this directory. HuggingFace and OGB caches stay in their
 
 ---
 
-
-
 ## Runtime, storage, and compute
 
 - **Network on first run:** OmniPath, PubChem, UniProt ID mapping, HuggingFace, and (if used) OGB / DTINet. Offline reruns need those caches.
@@ -627,53 +560,53 @@ Set `dirs.data_root` to this directory. HuggingFace and OGB caches stay in their
 - **GPU:** Steps 08a and 09a–09c benefit from a GPU. ComplEx² / GNN training uses GPU unless `use_cpu` is set.
 - **Reproducibility:** CTD (monthly), UniProt `current_release`, and the OmniPath API are live resources. Keep copies and dates of what you downloaded.
 
-**Conda environment (`tkgdti`).** Reported runs used `/home/exacloud/gscratch/mcweeney_lab/evans/external/miniforge3/envs/tkgdti` (linux-64). It was created on 12 August 2025 with `mamba create -f environment.yml` (miniforge3; conda 24.11.0). `environment.yml` does not pin versions. The resolved environment, exported 20 October 2026 with `conda env export -n tkgdti` (machine `prefix` removed), is [`environment.lock.yml`](environment.lock.yml). Channel order in that export is `pyg`, `pytorch`, `nvidia`, `defaults`, `conda-forge`, `nodefaults`.
+**Conda environment (**`tkgdti`**).** (miniforge3; conda 24.11.0). `environment.yml` does not pin versions. The resolved environment, exported 20 October 2026 with `conda env export -n tkgdti`, is `[environment.lock.yml](environment.lock.yml)`. Channel order in that export is `pyg`, `pytorch`, `nvidia`, `defaults`, `conda-forge`, `nodefaults`.
 
 Packages that define the runtime:
 
-| Package | Version | Build | Channel |
-| --- | --- | --- | --- |
-| python | 3.9.19 | `h0755675_0_cpython` | conda-forge |
-| pytorch | 2.4.1 | `py3.9_cuda12.4_cudnn9.1.0_0` | pytorch |
-| torchvision | 0.19.1 | `py39_cu124` | pytorch |
-| pytorch-cuda | 12.4 | `hc786d27_7` | pytorch |
-| pyg | 2.6.1 | `py39_torch_2.4.0_cu124` | pyg |
-| cuda-runtime | 12.4.1 | `0` | nvidia |
-| numpy | 1.26.4 | `py39h474f0d3_0` | conda-forge |
-| pandas | 2.2.3 | `py39h3b40f6f_1` | conda-forge |
-| scipy | 1.13.1 | `py39haf93ffa_0` | conda-forge |
-| scikit-learn | 1.6.1 | `py39h4b7350c_0` | conda-forge |
-| matplotlib-base | 3.3.2 | `py39h98787fa_1` | conda-forge |
-| seaborn-base | 0.13.0 | `pyhd8ed1ab_0` | conda-forge |
-| transformers | 4.55.0 | `pyhd8ed1ab_0` | conda-forge |
-| tokenizers | 0.21.4 | `py39h4a49e08_0` | conda-forge |
-| huggingface_hub | 0.34.4 | `pyhd8ed1ab_0` | conda-forge |
-| datasets | 3.6.0 | `pyhd8ed1ab_0` | conda-forge |
-| h5py | 3.13.0 | `nompi_py39h30a5a8d_100` | conda-forge |
-| statsmodels | 0.14.5 | `py39h7c0b2d6_0` | conda-forge |
-| networkx | 3.2 | `pyhd8ed1ab_0` | conda-forge |
-| pyarrow | 16.1.0 | `py39h8003fee_1` | conda-forge |
-| pubchempy | 1.0.4 | `pyhd8ed1ab_1` | conda-forge |
-| rdkit | 2025.3.5 | — | pypi |
-| biopython | 1.85 | — | pypi |
-| omnipath | 1.0.12 | — | pypi |
-| pypath-omnipath | 0.16.20 | — | pypi |
-| ogb | 1.3.6 | — | pypi |
-| snakemake | 7.32.4 | — | pypi |
-| umap-learn | 0.5.9.post2 | — | pypi |
+
+| Package         | Version     | Build                         | Channel     |
+| --------------- | ----------- | ----------------------------- | ----------- |
+| python          | 3.9.19      | `h0755675_0_cpython`          | conda-forge |
+| pytorch         | 2.4.1       | `py3.9_cuda12.4_cudnn9.1.0_0` | pytorch     |
+| torchvision     | 0.19.1      | `py39_cu124`                  | pytorch     |
+| pytorch-cuda    | 12.4        | `hc786d27_7`                  | pytorch     |
+| pyg             | 2.6.1       | `py39_torch_2.4.0_cu124`      | pyg         |
+| cuda-runtime    | 12.4.1      | `0`                           | nvidia      |
+| numpy           | 1.26.4      | `py39h474f0d3_0`              | conda-forge |
+| pandas          | 2.2.3       | `py39h3b40f6f_1`              | conda-forge |
+| scipy           | 1.13.1      | `py39haf93ffa_0`              | conda-forge |
+| scikit-learn    | 1.6.1       | `py39h4b7350c_0`              | conda-forge |
+| matplotlib-base | 3.3.2       | `py39h98787fa_1`              | conda-forge |
+| seaborn-base    | 0.13.0      | `pyhd8ed1ab_0`                | conda-forge |
+| transformers    | 4.55.0      | `pyhd8ed1ab_0`                | conda-forge |
+| tokenizers      | 0.21.4      | `py39h4a49e08_0`              | conda-forge |
+| huggingface_hub | 0.34.4      | `pyhd8ed1ab_0`                | conda-forge |
+| datasets        | 3.6.0       | `pyhd8ed1ab_0`                | conda-forge |
+| h5py            | 3.13.0      | `nompi_py39h30a5a8d_100`      | conda-forge |
+| statsmodels     | 0.14.5      | `py39h7c0b2d6_0`              | conda-forge |
+| networkx        | 3.2         | `pyhd8ed1ab_0`                | conda-forge |
+| pyarrow         | 16.1.0      | `py39h8003fee_1`              | conda-forge |
+| pubchempy       | 1.0.4       | `pyhd8ed1ab_1`                | conda-forge |
+| rdkit           | 2025.3.5    | —                             | pypi        |
+| biopython       | 1.85        | —                             | pypi        |
+| omnipath        | 1.0.12      | —                             | pypi        |
+| pypath-omnipath | 0.16.20     | —                             | pypi        |
+| ogb             | 1.3.6       | —                             | pypi        |
+| snakemake       | 7.32.4      | —                             | pypi        |
+| umap-learn      | 0.5.9.post2 | —                             | pypi        |
+
 
 Every other installed package, including build strings, is in `environment.lock.yml`.
 
 Four pip entries in that file are editable checkouts, not PyPI releases. `mamba env create -f environment.lock.yml` fails on them. Remove `tkgdti==0.1`, `gsnn==0.2`, `complex2==0.1`, and `hnet==0.1` from the pip section, create the env, then install the checkouts that were on `sys.path` when this snapshot was taken:
 
 - `tkgdti` 0.1 — this repository, `pip install -e .` (editable; the running code is the working tree, not a frozen tag)
-- `GSNN` 0.2 — `/home/exacloud/gscratch/mcweeney_lab/evans/GSNN`, commit `aacb74bc6572` (branch `dev2`; uncommitted changes were present)
-- `complex2` 0.1 — `/home/exacloud/gscratch/mcweeney_lab/evans/complex2`, commit `8257454a4652` (uncommitted changes were present)
+- `GSNN` 0.2 — `/home/exacloud/gscratch/mcweeney_lab/evans/GSNN`, commit `aacb74bc6572` (branch `dev2`)
+- `complex2` 0.1 — `/home/exacloud/gscratch/mcweeney_lab/evans/complex2`, commit `8257454a4652`
 - `hnet` 0.1 — `/home/exacloud/gscratch/mcweeney_lab/evans/hypernet`, commit `bfd2830be6ff`
 
 ---
-
-
 
 ## License notes (reuse and commercial use)
 
@@ -689,14 +622,12 @@ GPL-3.0 on this software does not replace dataset licenses. This project does no
 
 ---
 
-
-
 ## Citations
 
 Cite every resource you used. For CTD, UniProt, and PubChem, use the citation requested on those sites (they update the preferred paper).
 
-- **This software:** [https://doi.org/10.5281/zenodo.18809293](https://doi.org/10.5281/zenodo.18809293)
-- **Expanded Targetome (companion data + prediction subset):** Bottomly, D., Evans, N. & McWeeney, S. K. Expanding the set of high evidence drug-target interactions in the Cancer Targetome. Submitted. Dataset: Bottomly, D., Evans, N. & McWeeney, S. (2026). Targetome-Expanded Release. figshare. [https://doi.org/10.6084/m9.figshare.34367808.v1](https://doi.org/10.6084/m9.figshare.34367808.v1)
+- **This software:** [https://github.com/biodev/TKG-DTI](https://github.com/biodev/TKG-DTI) (GPL-3.0; see `LICENSE.md`)
+- **Expanded Targetome (companion data + prediction subset):** Bottomly, Daniel; Evans, Nathaniel; McWeeney, Shannon (2026). Targetome-Expanded Release. figshare. Dataset. [https://doi.org/10.6084/m9.figshare.34367808.v1](https://doi.org/10.6084/m9.figshare.34367808.v1)
 - **Cancer Targetome:** Blucher et al., *Trends Pharmacol. Sci.* 38:1085–1099 (2017)
 - **BeatAML 2.0:** Bottomly et al., *Cancer Cell* 40:850–864.e9 (2022)
 - **CTD:** [https://ctdbase.org/about/publications/#citing](https://ctdbase.org/about/publications/#citing)

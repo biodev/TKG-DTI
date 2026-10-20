@@ -2,14 +2,12 @@
 """
 Aggregate predictions across K-fold cross-validation folds.
 
-This script follows the logic of notebooks/00_AGG_FULL_TKG_PREDS.ipynb:
+Called by workflow/full-tkg rule k13:
 1. For each fold, read predictions and compute FNR/FPR estimates using linear interpolation
 2. Filter predictions based on min_fnr and max_fpr thresholds
 3. Aggregate across folds, computing mean metrics and fold counts
 4. Add metadata (inchikey, gene_symbol, inhibitor, uniprot_id)
 5. Save the final aggregated predictions
-
-Author: Generated from notebook logic
 """
 
 import argparse

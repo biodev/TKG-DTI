@@ -8,10 +8,6 @@ TARGETOME=https://github.com/biodev/beataml2.0_data/raw/main/beataml_drug_famili
 CTD_CHEM_DIS=https://ctdbase.org/reports/CTD_chemicals_diseases.csv.gz
 CTD_PROT_DIS=https://ctdbase.org/reports/CTD_curated_genes_diseases.csv.gz
 CTD_PROT_PATH=https://ctdbase.org/reports/CTD_genes_pathways.csv.gz
-BEATAML_INHIB_RESP=https://github.com/biodev/beataml2.0_data/raw/main/beataml_probit_curve_fits_v4_dbgap.txt
-BEATAML_MUT=https://github.com/biodev/beataml2.0_data/raw/main/beataml_wes_wv1to4_mutations_dbgap.txt
-BEATAML_EXPR=https://github.com/biodev/beataml2.0_data/raw/main/beataml_waves1to4_norm_exp_dbgap.txt
-BEATAML_EXPR_COUNTS=https://github.com/biodev/beataml2.0_data/raw/main/beataml_waves1to4_counts_dbgap.txt
 AA_SEQ=https://ftp.uniprot.org/pub/databases/uniprot/current_release/knowledgebase/reference_proteomes/Eukaryota/UP000005640/UP000005640_9606.fasta.gz
 
 # Create the ROOT directory if it doesn't exist
@@ -47,8 +43,4 @@ download_and_unzip $TARGETOME ${ROOT}beataml_drug_families.xlsx false
 download_and_unzip $CTD_CHEM_DIS ${ROOT}CTD_chemicals_diseases.csv.gz true
 download_and_unzip $CTD_PROT_DIS ${ROOT}CTD_curated_genes_diseases.csv.gz true
 download_and_unzip $CTD_PROT_PATH ${ROOT}CTD_genes_pathways.csv.gz true
-download_and_unzip $BEATAML_INHIB_RESP ${ROOT}beataml_probit_curve_fits_v4_dbgap.txt false
-download_and_unzip $BEATAML_MUT ${ROOT}beataml_wes_wv1to4_mutations_dbgap.txt false
-download_and_unzip $BEATAML_EXPR ${ROOT}beataml_waves1to4_norm_exp_dbgap.txt false
-download_and_unzip $BEATAML_EXPR_COUNTS ${ROOT}beataml_waves1to4_counts_dbgap.txt false
 download_and_unzip $AA_SEQ ${ROOT}UP000005640_9606.fasta.gz true

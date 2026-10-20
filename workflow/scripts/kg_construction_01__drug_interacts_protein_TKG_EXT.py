@@ -47,7 +47,7 @@ def load_tge(args):
     drug_names = tge_meta[lambda x: (x.molecule_type == 'Small molecule') 
                                   & (x.clinical_phase != 'preclinical compounds with bioactivity data')].inhibitor.unique().tolist()
 
-    tge = tge[lambda x: x.inhibitor.isin(drug_names)] # filter to beataml drugs 
+    tge = tge[lambda x: x.inhibitor.isin(drug_names)] # small molecules that are not preclinical-only 
 
     inchi2smiles = get_smiles_from_inchi(tge.inchi.values)
 
