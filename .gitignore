@@ -1,7 +1,8 @@
 /data/
 /output/
-/extdata/ 
 /data/
+/extdata/
+/patch_01-23-25.zip
 /deprecated/training_curves/
 **/__pycache__
 *.egg-info
@@ -10,3 +11,4 @@
 *.snakemake
 **/pypath_log/
 _dev.ipynb
+/deprecated/
