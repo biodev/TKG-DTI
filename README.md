@@ -16,29 +16,6 @@ TKG-DTI is a knowledge graph-based framework for predicting high-confidence drug
 
 See `quickstart.md` for instructions on installing and running the `full-tkg` workflow. 
 
-## Installation
-
-```bash
-# Clone the repository
-git clone https://github.com/biodev/TKG-DTI.git
-cd TKG-DTI
-
-# Create conda environment
-mamba env create -f environment.yml
-mamba activate tkgdti
-
-# Install the package
-pip install -e .
-```
-
-There are a few helper functions that we borrow from the GSNN [repo](https://github.com/nathanieljevans/GSNN), in the future we will remove this dependency. To install GSNN:
-
-```bash
-$ pip install git+https://github.com/nathanieljevans/GSNN 
-```
-
-
-
 ## Data
 
 File names, licenses, and where to get each source are in [data_availability.md](data_availability.md).
